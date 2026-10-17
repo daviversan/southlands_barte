@@ -1,0 +1,32 @@
+# Regras de negócio parametrizadas (PLANO.md seção 4). Trocar aqui, não no código.
+# Etiquetas: SABEMOS | CONFIRMADO | PARCIAL | ASSUMIDO (ver HIPOTESES.md).
+
+arredondamento:                     # CONFIRMADO: Orbe trunca, Tarvo arredonda normalmente
+  modo: ROUND_HALF_UP
+  casas: 2
+
+checkout:
+  base_comissao: taxa_contratada    # CONFIRMADO (P1): bruto x taxa contratada, sem custo da Orbe
+  limiar_divergencia_brl: 0.01      # ASSUMIDO (P13): guarda contra ruído; comparação é entre taxas
+  vigencia_venda: data_movimento    # ASSUMIDO (P11) para venda normal
+  vigencia_estorno: data_venda_original   # CONFIRMADO (P2)
+  estorno_abate_em: mes_do_estorno  # CONFIRMADO: agosto não é reaberto
+  antecipacao_mesma_nota: true      # CONFIRMADO (P3)
+  nf_tomador: lojista               # ASSUMIDO (P16)
+  nf_saldo_nao_positivo: pendencia  # CONFIRMADO: não emite nota, vira pendência (Financeiro)
+
+remessa:
+  participacao_tarvo: 0.5           # SABEMOS (e-mail da Ponte)
+  base_spread: realizado            # CONFIRMADO (P6): Spread R$, não o estimado D-1
+  spread_negativo: contestacao      # CONFIRMADO: fora da comissão e da nota; quem_decide = Financeiro
+  operacao_repetida: contar_uma_vez # CONFIRMADO: conta 1x e vai para a lista de correção da Ponte
+  precisao_spread_pct: 0.00001      # DECIDIDO: relatório traz Spread % com 5 casas
+  aprovado_com_ressalva_entra: true # ASSUMIDO (P10): segue o e-mail da Ponte
+  spread_padrao: null               # ABERTA (P4): sem valor, divergência desses lojistas não é calculada
+  nf_tomador:                       # SABEMOS (assinatura do e-mail da Ponte)
+    cnpj: "75374179000146"
+    nome: Ponte Câmbio
+
+bancos:
+  folha_e_impostos_de_08: baixa_provisao   # ASSUMIDO (P12): baixa_provisao | despesa
+  confianca_minima_ia: 0.8                 # Extra: abaixo disso vira pendência HUMANO

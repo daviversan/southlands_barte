@@ -55,7 +55,7 @@ entrada/ (arquivos como vêm)          config/                     saida/
 Lê cada arquivo **sem limpeza manual** e devolve DataFrames com colunas padronizadas + `arquivo_origem` + `ref_origem`. Cada fonte tem encoding próprio (Orbe ASCII, Aurora UTF-8, Plano ISO-8859-1, OFX CP1252): **um leitor por fonte, encoding explícito**.
 
 - `normalize.py`: `cnpj()` (só dígitos, `zfill(14)`), `brl()` (`"1.234,56"` → float), `pct()` (aceita `0.0259`, `'2,59%'`; **Orbe vem em pontos percentuais, planilha em fração** → tudo vira o mesmo ponto percentual antes de comparar), `data()` (pt-BR e serial Excel → `AAAA-MM-DD`).
-- `orbe.py`: CSV `;` decimal vírgula. `ref_origem = id_transacao`.
+- `orbe.py`: CSV `;` decimal vírgula. `ref_origem = id_transacao`. **Lê todos os arquivos Orbe da pasta** (`01_orbe_*` e `06_orbe_ajustes_*`, mesmo layout) e concatena; `arquivo_origem` é o arquivo **real** da linha (rastro de um estorno tardio aponta para o `06_`). Descoberta por padrão de nome, não por lista fixa; ajuste ausente em outro mês não é erro. Id repetido entre arquivos = erro (hoje não há).
 - `taxas.py`: só aba **Taxas vigentes**, cabeçalho achado pelo conteúdo (não pelo nº da linha), ignora rodapé; explode vigências (Bridge) em `(cnpj, ec, vigencia_ini, vigencia_fim, taxas…)`.
 - `ponte.py`: `email` stdlib → anexo xlsx → `openpyxl`; cabeçalho achado pelo conteúdo, ignora linhas de total; datas serial Excel. `ref_origem = Nº Operação`.
 - `bancos.py`: Aurora CSV (cabeçalho de 7 linhas; `ref_origem = L<nº linha física>`; ignora SALDO ANTERIOR/FINAL e o aviso); Meridiano OFX via regex em `<STMTTRN>` (SGML, não é XML; `ref_origem = FITID`; ignora SALDO).
@@ -296,7 +296,7 @@ Regras de colaboração:
 | A                                                                                                          | B                                                                                             |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `ingest/orbe.py`, `ingest/taxas.py` (vigências, `%` em texto, CNPJ numérico), cadastro mestre por EC exato | `main.py` (CLI) + `regras/pendencias.py` (API simples para qualquer módulo registrar exceção) |
-| `regras/checkout.py` **só** `VENDA` (1.840 linhas) → `comissoes_por_lojista` CHECKOUT + `rastro`           | Integra A em `main`; revisão cruzada do Mínimo às 12h15                                       |
+| `regras/checkout.py` **só** `VENDA` (1.841 linhas: 1.840 do `01_` + 1 do `06_`) → `comissoes_por_lojista` CHECKOUT + `rastro`           | Integra A em `main`; revisão cruzada do Mínimo às 12h15                                       |
 | EC sem contrato → `pendencias` (não entra na comissão)                                                     | Adianta base do Alvo **fora do caminho crítico**: `ingest/ponte.py` e `ingest/bancos.py`      |
 
 
@@ -305,7 +305,7 @@ Regras de colaboração:
 - [ ] **M1.** Um comando roda do zero e gera `saida/comissoes_por_lojista.csv`, `rastro.csv` e `pendencias.csv` sem erro e sem editar arquivo de entrada.
 - [ ] **M2.** `comissoes_por_lojista.csv`: colunas obrigatórias, `;`, decimal ponto, CNPJ com 14 dígitos, `linha_negocio = CHECKOUT`, 1 linha por lojista, ids `COM-…`.
 - [ ] **M3.** Para cada `id_saida`: Σ `rastro.valor` = `comissao_brl` (centavo exato). Todo `ref_origem` do rastro existe como `id_transacao` na Orbe e `arquivo_origem` aponta para o arquivo de origem.
-- [ ] **M4.** **Conservação:** das 1.943 linhas da Orbe, nenhuma some. As 1.840 `VENDA` = tratadas + em pendência; as 103 linhas não-`VENDA` (59 estornos, 38 antecipações, 6 reversões) são contadas no log da execução como "fora do escopo deste nível". Não aparecem em `pendencias.csv` (seriam alarme falso).
+- [ ] **M4.** **Conservação:** das 1.957 linhas da Orbe (1.943 do `01_` + 14 do `06_ajustes_tardios`), nenhuma some. As 1.841 `VENDA` = tratadas + em pendência; as 116 linhas não-`VENDA` (69 estornos, 38 antecipações, 9 reversões) são contadas no log da execução como "fora do escopo deste nível". Não aparecem em `pendencias.csv` (seriam alarme falso).
 - [ ] **M5.** Lojista casado **só por EC exato** da planilha. Zero fuzzy match. Atlas (`quem_decide = Comercial`), Horizonte/Novo Horizonte, Kiwi e Globo Trotter vão para `pendencias.csv` com `tipo`, `motivo` e `quem_decide` preenchidos.
 - [ ] **M6.** Testes unitários: Bridge com venda em 14/09 usa 2,59% e em 15/09 usa 2,19%; `'2,59%'` e `0.0259` dão o mesmo valor; CNPJ de 13 dígitos vira 14; faixa certa por modalidade/parcelas (débito, à vista, 2–6x, 7–12x, Pix); arredondamento `ROUND_HALF_UP` (um valor com `.xx5` arredonda para cima, não para o par).
 - [ ] **M7.** Revisão cruzada: 5 transações recalculadas à mão (`bruto × taxa contratada`) batem com o rastro; resultado anotado em `HIPOTESES.md`.
@@ -342,7 +342,7 @@ Regras de colaboração:
 
 *Comissões*
 
-- [ ] **A1.** Checkout: comissão = MDR das vendas − estornos + antecipação − reversões (só a taxa da antecipação revertida), por lojista; o rastro lista cada `id_transacao` envolvido (incluindo estornos e reversões com valor negativo). Reconciliação das 1.943 linhas da Orbe: tratadas + em pendência = 1.943.
+- [ ] **A1.** Checkout: comissão = MDR das vendas − estornos + antecipação − reversões (só a taxa da antecipação revertida), por lojista; o rastro lista cada `id_transacao` envolvido (incluindo estornos e reversões com valor negativo). Reconciliação das 1.957 linhas da Orbe (`01_` + `06_`): tratadas + em pendência = 1.957, com a contagem por arquivo no log.
 - [ ] **A2.** Estorno usa a taxa vigente na data da venda original (inclusive de agosto) e abate a comissão de **setembro** (a de agosto não é reaberta); reversão de antecipação anula só a taxa da antecipação referenciada em `id_referencia`. Estorno cuja venda original não está no arquivo é resolvido por `data_venda_original` + EC, nunca ignorado. Teste: estorno em setembro de venda de agosto reduz a comissão de setembro.
 - [ ] **A3.** Remessa: as 233 linhas da Ponte são lidas; `PC-0926-0162` conta **uma vez**; o par com mesmo CNPJ/valor/moeda/data é sinalizado; os 4 spreads negativos ficam fora da comissão **e da nota**; cada um deles está em `pendencias.csv` com `tipo = CONTESTACAO` (não em `divergencias_taxa.csv`) e motivo "trava de 2 horas excedida"; a repetida está na lista de correção para a Ponte.
 - [ ] **A4.** Remessa: comissão = 50% × Σ `Spread R$` válido por lojista (casado por **CNPJ normalizado**, 14 clientes distintos). Reconciliação documentada: `78.073,59 (rodapé) − repetida − negativos = base da comissão`, com cada parcela listada. Rodapé (233 / 78.073,59) conferido por teste.

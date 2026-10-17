@@ -1,0 +1,4 @@
+# Cadastro mestre de lojistas (EC <-> CNPJ).
+# Gerado por regra EXATA (EC da planilha de taxas) e completado só com confirmação humana.
+# Nunca por fuzzy match de nome. Preenchido no nível Mínimo (ingest/taxas).
+lojistas: {}

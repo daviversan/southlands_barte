@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+southlands_barte.code-workspace
+.DS_Store
