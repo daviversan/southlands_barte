@@ -2,6 +2,8 @@
 
 Sem regra de negócio: a execução é `main.run()` (a mesma da CLI) e o resto só lê os CSVs de `saida/`.
 O Streamlit é opcional e só é importado em `render()`; os auxiliares de leitura são testáveis sem ele.
+Entrada e saída são as pastas do repositório (`context/tarvo_data_pack` e `saida/`); a tela só pede
+a competência.
 
     pip install streamlit
     streamlit run src/app.py
@@ -22,6 +24,9 @@ if str(RAIZ) not in sys.path:  # `streamlit run` executa o arquivo como script, 
 
 from src import main  # noqa: E402
 from src.core.saida import ARQUIVOS_EMISSIVEIS, ESQUEMAS, QUEM_DECIDE  # noqa: E402
+
+ENTRADA = RAIZ / "context" / "tarvo_data_pack"
+SAIDA = RAIZ / "saida"
 
 TITULOS = {
     "comissoes_por_lojista": "Comissões por lojista",
@@ -53,14 +58,47 @@ def ler_saida(pasta: str | Path) -> dict[str, list[dict[str, str]]]:
     return saidas
 
 
-def totais(saidas: dict[str, list[dict[str, str]]]) -> list[dict[str, str]]:
-    """Linhas e Σ da coluna de valor de cada arquivo, como publicados."""
-    resumo = []
-    for nome in ARQUIVOS_EMISSIVEIS:
-        col = ESQUEMAS[nome].valor
-        soma = sum((Decimal(r[col]) for r in saidas[nome]), Decimal(0))
-        resumo.append({"arquivo": TITULOS[nome], "linhas": str(len(saidas[nome])), "total": brl(soma)})
-    return resumo
+def _soma(linhas, coluna: str, filtro=lambda r: True) -> Decimal:
+    return sum((Decimal(r[coluna]) for r in linhas if filtro(r)), Decimal(0))
+
+
+def _contar(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
+def cartoes(saidas: dict[str, list[dict[str, str]]]) -> list[dict]:
+    """Cartões do resumo: só totais que fazem sentido somar, separados por linha de negócio ou banco.
+
+    Lançamentos e pendências não têm valor somado: o primeiro misturaria entradas, saídas e
+    transferências entre as duas contas; o segundo, vendas, spreads e lançamentos.
+    """
+    def por_linha(nome, coluna):
+        return [f"{linha.capitalize()}: {brl(_soma(saidas[nome], coluna, lambda r: r['linha_negocio'] == linha))}"
+                for linha in ("CHECKOUT", "REMESSA")
+                if any(r["linha_negocio"] == linha for r in saidas[nome])]
+
+    com, div, nf = saidas["comissoes_por_lojista"], saidas["divergencias_taxa"], saidas["notas_a_emitir"]
+    lan, pen = saidas["lancamentos_classificados"], saidas["pendencias"]
+    por_regra = sum(1 for r in lan if r["metodo"] == "REGRA")
+    por_banco = {}
+    for r in lan:
+        por_banco[r["banco"]] = por_banco.get(r["banco"], 0) + 1
+    por_quem = {q: n for q in QUEM_DECIDE if (n := sum(1 for p in pen if p["quem_decide"] == q))}
+    return [
+        {"titulo": "Comissões", "valor": brl(_soma(com, "comissao_brl")),
+         "detalhes": por_linha("comissoes_por_lojista", "comissao_brl")},
+        {"titulo": "Divergências de taxa", "valor": brl(_soma(div, "diferenca_brl")),
+         "detalhes": por_linha("divergencias_taxa", "diferenca_brl")
+         + [_contar(len(div), "transação/operação", "transações/operações") + ", líquido de estornos"]},
+        {"titulo": "Notas a emitir", "valor": brl(_soma(nf, "valor_brl")),
+         "detalhes": [f"{_contar(sum(1 for n in nf if n['linha_negocio'] == linha), 'nota', 'notas')} de "
+                      f"{linha.lower()}" for linha in ("CHECKOUT", "REMESSA")]},
+        {"titulo": "Lançamentos bancários", "valor": _contar(len(lan), "lançamento", "lançamentos"),
+         "detalhes": [f"{banco.capitalize()}: {n}" for banco, n in sorted(por_banco.items())]
+         + [f"{por_regra} por regra, {len(lan) - por_regra} aguardando conta"]},
+        {"titulo": "Pendências", "valor": _contar(len(pen), "pendência", "pendências"),
+         "detalhes": [f"{quem}: {n}" for quem, n in por_quem.items()]},
+    ]
 
 
 def linha_de(saidas: dict[str, list[dict[str, str]]], id_saida: str) -> tuple[str, dict[str, str]] | None:
@@ -87,7 +125,7 @@ def brl(valor: Decimal) -> str:
     return "R$ " + f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def executar(entrada: str, competencia: str, saida: str) -> tuple[bool, str, list]:
+def executar(competencia: str, entrada: Path = ENTRADA, saida: Path = SAIDA) -> tuple[bool, str, list]:
     """Roda `main.run` capturando o resumo impresso. (sucesso, texto do resumo ou erro, checagens)."""
     buffer = io.StringIO()
     try:
@@ -99,6 +137,11 @@ def executar(entrada: str, competencia: str, saida: str) -> tuple[bool, str, lis
     return True, buffer.getvalue(), resultado.get("conferencia", [])
 
 
+def _md(texto: str) -> str:
+    """No markdown do Streamlit, dois `$` viram fórmula: escapa o cifrão de "R$"."""
+    return texto.replace("$", "\\$")
+
+
 def render() -> None:  # pragma: no cover - interface; a lógica testável está nos auxiliares acima
     import streamlit as st
 
@@ -107,13 +150,13 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
 
     with st.sidebar:
         st.header("Rodar o fechamento")
-        entrada = st.text_input("Pasta de entrada (arquivos como vêm)", str(RAIZ / "context" / "tarvo_data_pack"))
         competencia = st.text_input("Competência (AAAA-MM)", competencia_padrao())
-        pasta_saida = st.text_input("Pasta de saída", str(RAIZ / "saida"))
         if st.button("Rodar", type="primary"):
             with st.spinner("Lendo arquivos, calculando e conferindo..."):
-                st.session_state["execucao"] = executar(entrada, competencia, pasta_saida)
-        st.caption("O mesmo comando da CLI. Se a conferência falhar, a saída anterior é mantida.")
+                st.session_state["execucao"] = executar(competencia)
+        st.caption(f"Entrada: {ENTRADA.relative_to(RAIZ)}/ (arquivos como vêm). "
+                   f"Saída: {SAIDA.relative_to(RAIZ)}/. É o mesmo comando da CLI; se a conferência "
+                   "falhar, a saída anterior é mantida.")
 
     execucao = st.session_state.get("execucao")
     if execucao:
@@ -125,7 +168,7 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             falhas = [c for c in checagens if not c.ok and c.bloqueia]
             st.caption(f"Conferência: {len(checagens)} checagens, {len(falhas)} falha(s).")
 
-    saidas = ler_saida(pasta_saida)
+    saidas = ler_saida(SAIDA)
     if not any(saidas[n] for n in ARQUIVOS_EMISSIVEIS):
         st.info("Nenhuma saída nesta pasta ainda. Rode o fechamento pela barra lateral.")
         return
@@ -133,9 +176,12 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
     aba_resumo, aba_saidas, aba_rastro, aba_pend = st.tabs(["Resumo", "Saídas", "Rastro", "Pendências"])
 
     with aba_resumo:
-        colunas = st.columns(len(ARQUIVOS_EMISSIVEIS))
-        for coluna, t in zip(colunas, totais(saidas)):
-            coluna.metric(t["arquivo"], t["total"], f"{t['linhas']} linhas", delta_color="off")
+        lista = cartoes(saidas)
+        for coluna, cartao in zip(st.columns(len(lista)), lista):
+            with coluna.container(border=True):  # markdown quebra a linha em vez de cortar o número
+                st.caption(cartao["titulo"])
+                st.markdown(f"#### {_md(cartao['valor'])}")
+                st.markdown(_md("  \n".join(cartao["detalhes"])))
         if execucao and execucao[2]:
             st.subheader("Conferência (saída × rastro × entradas)")
             st.dataframe([{"grupo": c.grupo, "checagem": c.descricao, "obtido": c.obtido,
@@ -156,8 +202,8 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             st.markdown(f"**{TITULOS[nome]}**")
             st.dataframe([linha], use_container_width=True, hide_index=True)
             origens = rastro_de(saidas, escolhido)
-            st.markdown(f"**Linhas de origem ({len(origens)})** — soma "
-                        f"{brl(sum((Decimal(o['valor']) for o in origens), Decimal(0)))}")
+            st.markdown(_md(f"**Linhas de origem ({len(origens)})** — soma "
+                            f"{brl(sum((Decimal(o['valor']) for o in origens), Decimal(0)))}"))
             st.dataframe(origens, use_container_width=True, hide_index=True)
 
     with aba_pend:

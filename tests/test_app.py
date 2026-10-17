@@ -12,6 +12,10 @@ from src.core.saida import QUEM_DECIDE
 PACK = Path(__file__).resolve().parent.parent / "context" / "tarvo_data_pack"
 
 
+def test_entrada_e_saida_sao_as_pastas_do_repositorio():
+    assert app.ENTRADA == app.RAIZ / "context" / "tarvo_data_pack" and app.SAIDA == app.RAIZ / "saida"
+
+
 def test_app_nao_importa_regras_nem_leitores():
     arvore = ast.parse(Path(app.__file__).read_text(encoding="utf-8"))
     modulos = {n.module for n in ast.walk(arvore) if isinstance(n, ast.ImportFrom) and n.module}
@@ -27,11 +31,19 @@ def test_competencia_padrao_e_o_mes_anterior():
 
 @pytest.mark.skipif(not PACK.exists(), reason="data pack ausente")
 def test_executar_le_saida_rastro_e_fila(tmp_path):
-    ok, texto, checagens = app.executar(str(PACK), "2026-09", str(tmp_path))
+    ok, texto, checagens = app.executar("2026-09", PACK, tmp_path)
     assert ok and "Conferência" in texto and checagens
     saidas = app.ler_saida(tmp_path)
-    totais = {t["arquivo"]: t for t in app.totais(saidas)}
-    assert totais["Notas a emitir"]["linhas"] == "19"
+    cartoes = {c["titulo"]: c for c in app.cartoes(saidas)}
+    assert cartoes["Comissões"]["valor"] == "R$ 231.007,79"
+    assert cartoes["Comissões"]["detalhes"] == ["Checkout: R$ 191.464,34", "Remessa: R$ 39.543,45"]
+    assert cartoes["Notas a emitir"]["detalhes"] == ["18 notas de checkout", "1 nota de remessa"]
+    # sem somas que misturam naturezas diferentes
+    assert cartoes["Lançamentos bancários"]["valor"] == "184 lançamentos"
+    assert cartoes["Lançamentos bancários"]["detalhes"] == ["Aurora: 84", "Meridiano: 100", "184 por regra, 0 aguardando conta"]
+    assert cartoes["Pendências"]["valor"] == "302 pendências"
+    assert cartoes["Pendências"]["detalhes"] == ["Financeiro: 170", "Comercial: 131", "Ponte: 1"]
+    assert not any("R$" in d for c in ("Lançamentos bancários", "Pendências") for d in cartoes[c]["detalhes"])
 
     nf = saidas["notas_a_emitir"][0]
     assert app.linha_de(saidas, nf["id_saida"]) == ("notas_a_emitir", nf)
@@ -45,7 +57,7 @@ def test_executar_le_saida_rastro_e_fila(tmp_path):
 
 
 def test_executar_devolve_erro_sem_levantar(tmp_path):
-    ok, texto, checagens = app.executar(str(tmp_path / "nao_existe"), "2026-09", str(tmp_path / "saida"))
+    ok, texto, checagens = app.executar("2026-09", tmp_path / "nao_existe", tmp_path / "saida")
     assert not ok and "Erro" in texto and checagens == []
     assert app.ler_saida(tmp_path / "saida")["pendencias"] == []
 
@@ -87,11 +99,17 @@ def test_render_percorre_todas_as_telas(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "streamlit", falso)
     monkeypatch.setattr(app, "competencia_padrao", lambda: "2026-09")
     executar, ler_saida = app.executar, app.ler_saida  # a saída vai para tmp_path, não para saida/
-    monkeypatch.setattr(app, "executar", lambda entrada, competencia, _: executar(entrada, competencia, str(tmp_path)))
+    monkeypatch.setattr(app, "executar", lambda competencia: executar(competencia, PACK, tmp_path))
     monkeypatch.setattr(app, "ler_saida", lambda _: ler_saida(tmp_path))
     app.render()
     ok, _, checagens = falso.session_state["execucao"]
     assert ok and checagens
     nomes = [c[0] for c in falso.chamadas]
-    assert {"tabs", "metric", "dataframe", "selectbox", "success"} <= set(nomes)
+    assert {"tabs", "container", "dataframe", "selectbox", "success"} <= set(nomes)
     assert "error" not in nomes and "info" not in nomes
+    metricas = [c for c in falso.chamadas if c[0] == "metric"]
+    assert all(len(args) == 2 and "delta" not in kw for _, args, kw in metricas)  # sem seta de variação
+    rotulos = [c[1][0] for c in falso.chamadas if c[0] == "text_input"]
+    assert rotulos == ["Competência (AAAA-MM)"]  # sem campos de pasta
+    textos = " ".join(str(a) for c in falso.chamadas if c[0] == "markdown" for a in c[1])
+    assert "\\$ 231.007,79" in textos and "R$ 231" not in textos.replace("R\\$", "")
