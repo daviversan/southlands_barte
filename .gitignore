@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 southlands_barte.code-workspace
 .DS_Store
+
+# saída gerada pelo pipeline (python -m src.main); regenerável
+saida/*.csv
