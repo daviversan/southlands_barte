@@ -12,7 +12,7 @@ limpeza manual, e gera os seis CSVs do enunciado em `saida/`:
 
 Nível entregue: **Alvo + Extra** (rastro completo com conferência automática, pendências
 explicadas e execução para outubro sem retrabalho). Interface: CLI e CSVs, mais uma tela opcional
-em Streamlit.
+em Streamlit, publicada em https://southlandsbarte-aaiz3gp2rtbs5sirt3icvp.streamlit.app/.
 
 ## Instalar e rodar do zero
 
@@ -124,8 +124,11 @@ Nenhum CNPJ, EC, nome de lojista, padrão de extrato ou conta contábil está no
 
 ## Tela (opcional)
 
-Para quem prefere não abrir CSVs: rodar o fechamento, ver os totais e a conferência, escolher um
-`id_saida` e ver as linhas de origem, e a fila de pendências por `quem_decide`.
+Para quem prefere não abrir CSVs.
+
+**No ar:** https://southlandsbarte-aaiz3gp2rtbs5sirt3icvp.streamlit.app/ (Streamlit Community Cloud, sem instalar nada).
+
+Para rodar localmente:
 
 ```bash
 streamlit run src/app.py
@@ -144,6 +147,17 @@ O lote enviado é usado sozinho, sem completar arquivos ausentes com dados de
 exemplo. Os documentos permanecem em `context/uploads/<lote>/` para auditoria,
 com os nomes e conteúdos originais, e são ignorados pelo Git.
 Sem envio, a tela usa o pacote de exemplo em `context/tarvo_data_pack`.
+| Onde | O que faz |
+|---|---|
+| **Barra lateral** | Informa o mês analizado (padrão: o mês anterior), recebe os documentos e roda o fechamento com o botão **Rodar**. Mostra se o fechamento foi publicado ou não, o resumo impresso pela execução e o total de checagens da conferência com as falhas. |
+| **Resumo** | Cinco cartões: comissões e divergências (total e por linha de negócio), notas a emitir (valor e quantidade por linha), lançamentos (por banco, por regra ou aguardando conta) e pendências (por `quem_decide`). Abaixo, a tabela da conferência, uma linha por checagem com obtido × esperado e situação (`ok`, `aviso`, `falha`). |
+| **Saídas** | Escolhe um dos cinco arquivos (comissões, divergências, notas, lançamentos, pendências) e mostra a tabela inteira. |
+| **Rastro** | Escolhe um `id_saida` e mostra a linha publicada e as linhas de origem que a compõem (`arquivo_origem`, `ref_origem`, `valor`), com a soma, que é igual ao valor publicado. |
+| **Pendências** | Fila por `quem_decide` (Financeiro, Comercial, Ponte, Contador), com a contagem de cada um. Cada grupo abre uma tabela com tipo, origem, valor, motivo e sugestão, as maiores primeiro. |
+
+- **Sessão isolada:** cada visitante tem uma pasta de saída temporária própria. A página abre vazia e a pasta some quando a página é recarregada, então quem acessa o deploy não vê o fechamento de outra pessoa.
+- **Entrada:** usa o lote enviado pela tela ou, sem upload, os dados de exemplo de `context/tarvo_data_pack/`.
+- **Sem regra de negócio:** a tela chama o mesmo `main.run()` da CLI e só lê os CSVs. Se a conferência falhar, nada é publicado e o erro aparece na barra lateral.
 
 ## Limitações conhecidas
 
