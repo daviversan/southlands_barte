@@ -2,8 +2,8 @@
 
 Sem regra de negócio: a execução é `main.run()` (a mesma da CLI) e o resto só lê os CSVs de `saida/`.
 O Streamlit é opcional e só é importado em `render()`; os auxiliares de leitura são testáveis sem ele.
-Entrada e saída são as pastas do repositório (`context/tarvo_data_pack` e `saida/`); a tela só pede
-a competência.
+A entrada é a pasta do repositório (`context/tarvo_data_pack`); a saída é uma pasta temporária por
+sessão, então cada visitante (ou recarga da página) começa com a tela limpa. A tela só pede a competência.
 
     pip install streamlit
     streamlit run src/app.py
@@ -14,6 +14,7 @@ import contextlib
 import csv
 import io
 import sys
+import tempfile
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -37,11 +38,22 @@ TITULOS = {
 }
 
 
+# Coluna `origem_motivo` de pendencias.csv, como aparece na tela.
+ROTULO_MOTIVO = {"REGRA": "regra", "IA": "gerado por IA", "PADRAO": "texto padrão"}
+
+
 def competencia_padrao(hoje: date | None = None) -> str:
     """Mês anterior ao atual: o fechamento roda depois de o mês acabar."""
     hoje = hoje or date.today()
     ano, mes = (hoje.year, hoje.month - 1) if hoje.month > 1 else (hoje.year - 1, 12)
     return f"{ano:04d}-{mes:02d}"
+
+
+def pasta_da_sessao(estado) -> Path:
+    """Pasta de saída desta sessão: criada vazia na primeira visita, reaproveitada nas interações seguintes."""
+    if "pasta_saida" not in estado:
+        estado["pasta_saida"] = tempfile.mkdtemp(prefix="fechamento_")
+    return Path(estado["pasta_saida"])
 
 
 def ler_saida(pasta: str | Path) -> dict[str, list[dict[str, str]]]:
@@ -147,16 +159,17 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
 
     st.set_page_config(page_title="Fechamento Tarvo", layout="wide")
     st.title("Fechamento Tarvo")
+    saida = pasta_da_sessao(st.session_state)
 
     with st.sidebar:
         st.header("Rodar o fechamento")
         competencia = st.text_input("Competência (AAAA-MM)", competencia_padrao())
         if st.button("Rodar", type="primary"):
             with st.spinner("Lendo arquivos, calculando e conferindo..."):
-                st.session_state["execucao"] = executar(competencia)
+                st.session_state["execucao"] = executar(competencia, ENTRADA, saida)
         st.caption(f"Entrada: {ENTRADA.relative_to(RAIZ)}/ (arquivos como vêm). "
-                   f"Saída: {SAIDA.relative_to(RAIZ)}/. É o mesmo comando da CLI; se a conferência "
-                   "falhar, a saída anterior é mantida.")
+                   "Saída: pasta temporária desta sessão (some ao recarregar a página). É o mesmo "
+                   "comando da CLI; se a conferência falhar, a saída anterior é mantida.")
 
     execucao = st.session_state.get("execucao")
     if execucao:
@@ -169,9 +182,9 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             st.caption(f"Conferência: {len(checagens)} checagens, {len(falhas)} falha(s).")
 
     try:
-        saidas = ler_saida(SAIDA)
+        saidas = ler_saida(saida)
     except PermissionError as erro:
-        st.error(f"Sem permissão para ler o arquivo {erro.filename or SAIDA}. "
+        st.error(f"Sem permissão para ler o arquivo {erro.filename or saida}. "
                  "Verifique as permissões da pasta de saída e se o arquivo está aberto em outro programa.")
         return
     except OSError as erro:
@@ -221,9 +234,13 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             coluna.metric(quem, f"{len(ps)} pendência(s)")
         for quem, ps in fila.items():
             with st.expander(f"{quem} — {len(ps)} pendência(s)"):
-                st.dataframe([{k: p.get(k, "") for k in ("id_saida", "tipo", "ref_origem", "valor_brl",
-                                                         "motivo", "sugestao")} for p in ps],
+                st.dataframe([{**{k: p.get(k, "") for k in ("id_saida", "tipo", "ref_origem", "valor_brl",
+                                                            "motivo", "sugestao")},
+                               "texto": ROTULO_MOTIVO.get(p.get("origem_motivo", ""), "")} for p in ps],
                              use_container_width=True, hide_index=True)
+        if any(p.get("origem_motivo") == "IA" for ps in fila.values() for p in ps):
+            st.caption("\"gerado por IA\": a regra não sabia explicar o caso e a IA redigiu a leitura e a "
+                       "sugestão. Valores e decisões não mudam; confirmar antes de agir.")
 
 
 if __name__ == "__main__":
