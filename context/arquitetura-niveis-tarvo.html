@@ -1,0 +1,400 @@
+<title>Arquitetura da solução por nível de entrega</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: um diagrama largo (entrada → dados → regras → contrato → saída) com cada módulo marcado pelo nível em que nasce, seguido de tabelas de apoio. */
+:root {
+  --bg: #F2F4F5;
+  --surface: #FFFFFF;
+  --ink: #12212A;
+  --muted: #55646D;
+  --line: #C5CED3;
+  --tint: #E7EDF0;
+  --m: #0A7D63;
+  --m-soft: #D9EFE8;
+  --a: #2457A6;
+  --a-soft: #DCE8F8;
+  --e: #A65F00;
+  --e-soft: #FBE9CC;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E171C;
+    --surface: #16232A;
+    --ink: #E6EEF1;
+    --muted: #94A5AE;
+    --line: #33454E;
+    --tint: #1B2B33;
+    --m: #3FCBA4;
+    --m-soft: #14382F;
+    --a: #7FB0F5;
+    --a-soft: #1B3050;
+    --e: #F0B45A;
+    --e-soft: #3D2D12;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E171C;
+  --surface: #16232A;
+  --ink: #E6EEF1;
+  --muted: #94A5AE;
+  --line: #33454E;
+  --tint: #1B2B33;
+  --m: #3FCBA4;
+  --m-soft: #14382F;
+  --a: #7FB0F5;
+  --a-soft: #1B3050;
+  --e: #F0B45A;
+  --e-soft: #3D2D12;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+h1 { font-size: 28px; line-height: 1.15; font-weight: 600; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+.lede { color: var(--muted); max-width: 65ch; margin: 0; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+figure { margin: 0; }
+.figbox { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; }
+.figbox svg { display: block; width: 100%; min-width: 960px; height: auto; color: var(--ink); }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 10px; max-width: 80ch; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chip { display: inline-block; font-family: var(--font-num); font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid; }
+.chip.m { border-color: var(--m); background: var(--m-soft); color: var(--m); }
+.chip.a { border-color: var(--a); background: var(--a-soft); color: var(--a); }
+.chip.e { border-color: var(--e); background: var(--e-soft); color: var(--e); border-style: dashed; }
+
+/* SVG */
+.n-m { fill: var(--surface); stroke: var(--m); stroke-width: 1.6; }
+.n-a { fill: var(--surface); stroke: var(--a); stroke-width: 1.6; }
+.n-e { fill: var(--surface); stroke: var(--e); stroke-width: 1.6; stroke-dasharray: 6 3; }
+.n-core { fill: var(--tint); stroke: var(--ink); stroke-width: 1.6; }
+.flow { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+.flow.ext { stroke: var(--e); stroke-dasharray: 5 3; }
+.flow.cfg { stroke: var(--muted); stroke-dasharray: 2 3; }
+.m-ext { fill: var(--e); }
+.m-cfg { fill: var(--muted); }
+.tt { font-size: 13px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+.ts { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+.lx { font-size: 11px; fill: var(--ink); }
+.lxm { font-size: 11px; fill: var(--muted); }
+.col { font-size: 11px; font-weight: 600; letter-spacing: .08em; fill: var(--muted); }
+.pm { fill: var(--m-soft); stroke: var(--m); stroke-width: 1; }
+.pa { fill: var(--a-soft); stroke: var(--a); stroke-width: 1; }
+.pe { fill: var(--e-soft); stroke: var(--e); stroke-width: 1; stroke-dasharray: 3 2; }
+.tm, .ta, .te { font-family: var(--font-num); font-size: 10px; font-weight: 500; text-anchor: middle; }
+.tm { fill: var(--m); }
+.ta { fill: var(--a); }
+.te { fill: var(--e); }
+
+/* Tables */
+.tbox { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--tint); }
+tr:last-child td { border-bottom: 0; }
+td.k { white-space: nowrap; }
+td .sub { color: var(--muted); font-size: 13px; display: block; }
+
+.gaps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 75ch; }
+.gaps li { padding-left: 4px; }
+
+:focus-visible { outline: 2px solid var(--m); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Arquitetura da solução por nível de entrega</h1>
+    <p class="lede">Como os seis arquivos do data pack viram as seis saídas, e em qual nível (Mínimo, Alvo ou Extra) cada módulo entra. Time de 2 pessoas, fechamento de setembro/2026.</p>
+  </header>
+
+  <section>
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 1110 620" role="img" aria-label="Arquitetura em cinco colunas. Entrada: seis arquivos do data pack. Dados: leitores por fonte, apoiados por normalize. Regras: checkout, remessa, notas, classificação, pendências e, no nível Extra, um fallback de IA. Contrato: core saida.py, que escreve as saídas e o rastro e falha se a soma do rastro não bater. Saída: seis arquivos CSV e, no nível Extra, um front Streamlit. O nível Mínimo cobre Orbe, taxas, checkout de vendas, comissão de checkout, rastro e pendências. O nível Alvo acrescenta Ponte, bancos, remessa, notas, divergências e lançamentos. O nível Extra acrescenta IA, front, relatório de conferência e pendências explicadas.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="currentColor"/>
+            </marker>
+            <marker id="ahe" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="m-ext" d="M0 0L10 5L0 10z"/>
+            </marker>
+            <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="m-cfg" d="M0 0L10 5L0 10z"/>
+            </marker>
+          </defs>
+
+          <!-- Cabeçalhos de coluna -->
+          <text class="col" x="10"  y="30">ENTRADA · COMO VEM</text>
+          <text class="col" x="215" y="30">DADOS · SRC/INGEST</text>
+          <text class="col" x="440" y="30">REGRAS · SRC/REGRAS</text>
+          <text class="col" x="680" y="30">CONTRATO</text>
+          <text class="col" x="830" y="30">SAÍDA · SAIDA/</text>
+
+          <!-- Legenda de nível -->
+          <rect class="pm" x="10" y="44" width="36" height="16" rx="8"/><text class="tm" x="28" y="55.5">MÍN</text>
+          <text class="lx" x="54" y="56">gate 12h30</text>
+          <rect class="pa" x="10" y="64" width="40" height="16" rx="8"/><text class="ta" x="30" y="75.5">ALVO</text>
+          <text class="lx" x="58" y="76">gate 15h30</text>
+          <rect class="pe" x="10" y="84" width="46" height="16" rx="8"/><text class="te" x="33" y="95.5">EXTRA</text>
+          <text class="lx" x="64" y="96">corte 16h30</text>
+
+          <!-- Topo: apoio -->
+          <rect class="n-m" x="215" y="44" width="170" height="52" rx="6"/>
+          <text class="tt" x="300" y="66">core/normalize.py</text>
+          <text class="ts" x="300" y="83">cnpj · brl · pct · data</text>
+          <rect class="pm" x="343" y="36" width="36" height="16" rx="8"/><text class="tm" x="361" y="47.5">MÍN</text>
+
+          <rect class="n-m" x="440" y="44" width="190" height="52" rx="6"/>
+          <text class="tt" x="535" y="66">config/*.yaml</text>
+          <text class="ts" x="535" y="83">taxas · limiares · regex → conta</text>
+          <rect class="pm" x="588" y="36" width="36" height="16" rx="8"/><text class="tm" x="606" y="47.5">MÍN</text>
+
+          <path class="flow cfg" d="M300 96 V130" marker-end="url(#ahc)"/>
+          <path class="flow cfg" d="M535 96 V114" marker-end="url(#ahc)"/>
+
+          <!-- ENTRADA -->
+          <rect class="n-m" x="10" y="116" width="150" height="52" rx="6"/>
+          <text class="tt" x="85" y="138">01 Orbe</text>
+          <text class="ts" x="85" y="155">CSV · 1.943 linhas</text>
+          <rect class="pm" x="118" y="108" width="36" height="16" rx="8"/><text class="tm" x="136" y="119.5">MÍN</text>
+
+          <rect class="n-m" x="10" y="192" width="150" height="52" rx="6"/>
+          <text class="tt" x="85" y="214">02 Taxas</text>
+          <text class="ts" x="85" y="231">xlsx · aba vigente</text>
+          <rect class="pm" x="118" y="184" width="36" height="16" rx="8"/><text class="tm" x="136" y="195.5">MÍN</text>
+
+          <rect class="n-a" x="10" y="268" width="150" height="52" rx="6"/>
+          <text class="tt" x="85" y="290">03 Ponte Câmbio</text>
+          <text class="ts" x="85" y="307">.eml → xlsx · 233 ops</text>
+          <rect class="pa" x="114" y="260" width="40" height="16" rx="8"/><text class="ta" x="134" y="271.5">ALVO</text>
+
+          <rect class="n-a" x="10" y="344" width="150" height="52" rx="6"/>
+          <text class="tt" x="85" y="366">05a Aurora</text>
+          <text class="ts" x="85" y="383">CSV · 84 lançamentos</text>
+          <rect class="pa" x="114" y="336" width="40" height="16" rx="8"/><text class="ta" x="134" y="347.5">ALVO</text>
+
+          <rect class="n-a" x="10" y="420" width="150" height="52" rx="6"/>
+          <text class="tt" x="85" y="442">05b Meridiano</text>
+          <text class="ts" x="85" y="459">OFX · 100 lançamentos</text>
+          <rect class="pa" x="114" y="412" width="40" height="16" rx="8"/><text class="ta" x="134" y="423.5">ALVO</text>
+
+          <rect class="n-a" x="10" y="496" width="150" height="52" rx="6"/>
+          <text class="tt" x="85" y="518">04 Plano de contas</text>
+          <text class="ts" x="85" y="535">ISO-8859-1 · 32 analíticas</text>
+          <rect class="pa" x="114" y="488" width="40" height="16" rx="8"/><text class="ta" x="134" y="499.5">ALVO</text>
+
+          <!-- DADOS -->
+          <rect class="n-m" x="215" y="132" width="170" height="96" rx="6"/>
+          <text class="tt" x="300" y="157">orbe.py · taxas.py</text>
+          <text class="ts" x="300" y="175">vigências · % em texto</text>
+          <text class="ts" x="300" y="190">CNPJ numérico</text>
+          <text class="ts" x="300" y="205">cadastro mestre EC ↔ CNPJ</text>
+          <rect class="pm" x="343" y="124" width="36" height="16" rx="8"/><text class="tm" x="361" y="135.5">MÍN</text>
+
+          <rect class="n-a" x="215" y="268" width="170" height="64" rx="6"/>
+          <text class="tt" x="300" y="292">ponte.py</text>
+          <text class="ts" x="300" y="310">e-mail → anexo xlsx</text>
+          <text class="ts" x="300" y="324">datas serial Excel</text>
+          <rect class="pa" x="339" y="260" width="40" height="16" rx="8"/><text class="ta" x="359" y="271.5">ALVO</text>
+
+          <rect class="n-a" x="215" y="352" width="170" height="176" rx="6"/>
+          <text class="tt" x="300" y="420">bancos.py · plano.py</text>
+          <text class="ts" x="300" y="438">Aurora: linha física (L9…)</text>
+          <text class="ts" x="300" y="454">Meridiano: OFX por regex</text>
+          <text class="ts" x="300" y="470">só contas ACEITA_LANCTO = S</text>
+          <rect class="pa" x="339" y="344" width="40" height="16" rx="8"/><text class="ta" x="359" y="355.5">ALVO</text>
+
+          <path class="flow" d="M160 142 H186 V152 H213" marker-end="url(#ah)"/>
+          <path class="flow" d="M160 218 H186 V206 H213" marker-end="url(#ah)"/>
+          <path class="flow" d="M160 294 H186 V300 H213" marker-end="url(#ah)"/>
+          <path class="flow" d="M160 370 H186 V380 H213" marker-end="url(#ah)"/>
+          <path class="flow" d="M160 446 H213" marker-end="url(#ah)"/>
+          <path class="flow" d="M160 522 H186 V512 H213" marker-end="url(#ah)"/>
+
+          <!-- REGRAS -->
+          <rect class="n-m" x="440" y="116" width="190" height="64" rx="6"/>
+          <text class="tt" x="535" y="139">checkout.py</text>
+          <text class="ts" x="535" y="156">MÍN: só VENDA</text>
+          <text class="ts" x="535" y="171">ALVO: estorno · antecip. · vigência</text>
+          <rect class="pm" x="544" y="108" width="36" height="16" rx="8"/><text class="tm" x="562" y="119.5">MÍN</text>
+          <rect class="pa" x="584" y="108" width="40" height="16" rx="8"/><text class="ta" x="604" y="119.5">ALVO</text>
+
+          <rect class="n-a" x="440" y="196" width="190" height="56" rx="6"/>
+          <text class="tt" x="535" y="220">notas.py</text>
+          <text class="ts" x="535" y="237">1 NF por lojista + 1 p/ a Ponte</text>
+          <rect class="pa" x="584" y="188" width="40" height="16" rx="8"/><text class="ta" x="604" y="199.5">ALVO</text>
+
+          <rect class="n-a" x="440" y="268" width="190" height="64" rx="6"/>
+          <text class="tt" x="535" y="292">remessa.py</text>
+          <text class="ts" x="535" y="310">dedupe · spread negativo</text>
+          <text class="ts" x="535" y="324">50% do spread · divergência</text>
+          <rect class="pa" x="584" y="260" width="40" height="16" rx="8"/><text class="ta" x="604" y="271.5">ALVO</text>
+
+          <rect class="n-m" x="440" y="348" width="190" height="56" rx="6"/>
+          <text class="tt" x="535" y="372">pendencias.py</text>
+          <text class="ts" x="535" y="389">tipo · motivo · quem decide</text>
+          <rect class="pm" x="494" y="340" width="36" height="16" rx="8"/><text class="tm" x="512" y="351.5">MÍN</text>
+          <rect class="pa" x="534" y="340" width="40" height="16" rx="8"/><text class="ta" x="554" y="351.5">ALVO</text>
+          <rect class="pe" x="578" y="340" width="46" height="16" rx="8"/><text class="te" x="601" y="351.5">EXTRA</text>
+
+          <rect class="n-a" x="440" y="420" width="190" height="56" rx="6"/>
+          <text class="tt" x="535" y="444">classificacao.py</text>
+          <text class="ts" x="535" y="461">regex → conta · REGRA</text>
+          <rect class="pa" x="584" y="412" width="40" height="16" rx="8"/><text class="ta" x="604" y="423.5">ALVO</text>
+
+          <rect class="n-e" x="440" y="506" width="190" height="56" rx="6"/>
+          <text class="tt" x="535" y="530">ia/llm.py</text>
+          <text class="ts" x="535" y="547">só se nenhuma regra pegou</text>
+          <rect class="pe" x="578" y="498" width="46" height="16" rx="8"/><text class="te" x="601" y="509.5">EXTRA</text>
+
+          <!-- Dados → regras -->
+          <path class="flow" d="M385 180 H412 V148 H438" marker-end="url(#ah)"/>
+          <path class="flow" d="M385 300 H438" marker-end="url(#ah)"/>
+          <path class="flow" d="M385 440 H438" marker-end="url(#ah)"/>
+          <!-- checkout/remessa → notas -->
+          <path class="flow" d="M535 180 V194" marker-end="url(#ah)"/>
+          <path class="flow" d="M535 268 V254" marker-end="url(#ah)"/>
+          <!-- classificacao → llm -->
+          <path class="flow ext" d="M535 476 V504" marker-end="url(#ahe)"/>
+          <text class="lxm" x="545" y="494">sem match</text>
+
+          <!-- CONTRATO -->
+          <rect class="n-core" x="680" y="116" width="110" height="452" rx="6"/>
+          <text class="tt" x="735" y="296">core/saida.py</text>
+          <text class="ts" x="735" y="316">emitir()</text>
+          <text class="ts" x="735" y="332">gera id_saida</text>
+          <text class="ts" x="735" y="348">escreve o rastro</text>
+          <text class="ts" x="735" y="372">falha se</text>
+          <text class="ts" x="735" y="388">Σ rastro ≠ valor</text>
+          <text class="ts" x="735" y="508">E1 · relatório</text>
+          <text class="ts" x="735" y="524">de conferência</text>
+          <rect class="pm" x="748" y="108" width="36" height="16" rx="8"/><text class="tm" x="766" y="119.5">MÍN</text>
+          <rect class="pe" x="698" y="108" width="46" height="16" rx="8"/><text class="te" x="721" y="119.5">EXTRA</text>
+
+          <path class="flow" d="M630 148 H678" marker-end="url(#ah)"/>
+          <path class="flow" d="M630 224 H678" marker-end="url(#ah)"/>
+          <path class="flow" d="M630 300 H678" marker-end="url(#ah)"/>
+          <path class="flow" d="M630 376 H678" marker-end="url(#ah)"/>
+          <path class="flow" d="M630 448 H678" marker-end="url(#ah)"/>
+          <path class="flow ext" d="M630 534 H678" marker-end="url(#ahe)"/>
+
+          <!-- SAÍDA -->
+          <rect class="n-m" x="830" y="116" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="138">comissoes_por_lojista.csv</text>
+          <text class="ts" x="965" y="155">CHECKOUT no mínimo · REMESSA no alvo</text>
+          <rect class="pm" x="1014" y="108" width="36" height="16" rx="8"/><text class="tm" x="1032" y="119.5">MÍN</text>
+          <rect class="pa" x="1054" y="108" width="40" height="16" rx="8"/><text class="ta" x="1074" y="119.5">ALVO</text>
+
+          <rect class="n-a" x="830" y="186" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="208">divergencias_taxa.csv</text>
+          <text class="ts" x="965" y="225">taxa contratada × aplicada, em R$</text>
+          <rect class="pa" x="1054" y="178" width="40" height="16" rx="8"/><text class="ta" x="1074" y="189.5">ALVO</text>
+
+          <rect class="n-a" x="830" y="256" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="278">notas_a_emitir.csv</text>
+          <text class="ts" x="965" y="295">para quem, de qual linha, de quanto</text>
+          <rect class="pa" x="1054" y="248" width="40" height="16" rx="8"/><text class="ta" x="1074" y="259.5">ALVO</text>
+
+          <rect class="n-a" x="830" y="326" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="348">lancamentos_classificados.csv</text>
+          <text class="ts" x="965" y="365">184 lançamentos · REGRA (IA no extra)</text>
+          <rect class="pa" x="1004" y="318" width="40" height="16" rx="8"/><text class="ta" x="1024" y="329.5">ALVO</text>
+          <rect class="pe" x="1048" y="318" width="46" height="16" rx="8"/><text class="te" x="1071" y="329.5">EXTRA</text>
+
+          <rect class="n-m" x="830" y="396" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="418">pendencias.csv</text>
+          <text class="ts" x="965" y="435">mín: lojista sem contrato · extra: explicada</text>
+          <rect class="pm" x="964" y="388" width="36" height="16" rx="8"/><text class="tm" x="982" y="399.5">MÍN</text>
+          <rect class="pa" x="1004" y="388" width="40" height="16" rx="8"/><text class="ta" x="1024" y="399.5">ALVO</text>
+          <rect class="pe" x="1048" y="388" width="46" height="16" rx="8"/><text class="te" x="1071" y="399.5">EXTRA</text>
+
+          <rect class="n-m" x="830" y="466" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="488">rastro.csv</text>
+          <text class="ts" x="965" y="505">Σ por id_saida = valor reportado</text>
+          <rect class="pm" x="1008" y="458" width="36" height="16" rx="8"/><text class="tm" x="1026" y="469.5">MÍN</text>
+          <rect class="pe" x="1048" y="458" width="46" height="16" rx="8"/><text class="te" x="1071" y="469.5">EXTRA</text>
+
+          <path class="flow" d="M790 142 H828" marker-end="url(#ah)"/>
+          <path class="flow" d="M790 212 H828" marker-end="url(#ah)"/>
+          <path class="flow" d="M790 282 H828" marker-end="url(#ah)"/>
+          <path class="flow" d="M790 352 H828" marker-end="url(#ah)"/>
+          <path class="flow" d="M790 422 H828" marker-end="url(#ah)"/>
+          <path class="flow" d="M790 492 H828" marker-end="url(#ah)"/>
+
+          <!-- Front (Extra) -->
+          <rect class="n-e" x="830" y="546" width="270" height="52" rx="6"/>
+          <text class="tt" x="965" y="568">app.py · Streamlit</text>
+          <text class="ts" x="965" y="585">clica no número → linhas de origem</text>
+          <rect class="pe" x="1048" y="538" width="46" height="16" rx="8"/><text class="te" x="1071" y="549.5">EXTRA</text>
+          <path class="flow ext" d="M965 518 V544" marker-end="url(#ahe)"/>
+          <text class="lxm" x="975" y="535">só lê saida/</text>
+        </svg>
+      </div>
+      <figcaption>Linha cheia: nível Mínimo e Alvo. Linha tracejada em âmbar: nível Extra, que nunca altera um número do Alvo. Cada módulo leva a etiqueta do nível em que nasce; os que aparecem com mais de uma etiqueta crescem de nível em nível (por exemplo, o checkout começa só com vendas e ganha estornos e antecipação no Alvo).</figcaption>
+      <div class="legend">
+        <span><span class="chip m">MÍN</span> comissão de checkout com rastro</span>
+        <span><span class="chip a">ALVO</span> duas linhas, divergências, notas, lançamentos</span>
+        <span><span class="chip e">EXTRA</span> rastro completo, pendências explicadas, roda em outubro</span>
+      </div>
+    </figure>
+  </section>
+
+  <section>
+    <h2>O que acende em cada nível</h2>
+    <div class="tbox">
+      <table>
+        <thead><tr><th>Nível</th><th>Módulos que entram</th><th>Saídas</th><th>Gate</th><th>Quem</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="k"><span class="chip m">MÍN</span></td>
+            <td>normalize, orbe, taxas, cadastro mestre, checkout só com <code>VENDA</code>, saida, pendencias, main (CLI)</td>
+            <td><code>comissoes_por_lojista</code> (CHECKOUT), <code>rastro</code>, <code>pendencias</code></td>
+            <td class="num">12h30<span class="sub">critérios M1–M8 · tag <code>minimo</code></span></td>
+            <td>A: dados e checkout<span class="sub">B: saida, main, pendencias</span></td>
+          </tr>
+          <tr>
+            <td class="k"><span class="chip a">ALVO</span></td>
+            <td>ponte, remessa, bancos, plano, classificacao, notas, checkout completo (estorno, antecipação, vigência)</td>
+            <td>os seis arquivos de <code>saida/</code></td>
+            <td class="num">15h30<span class="sub">critérios A1–A17 · tag <code>alvo</code></span></td>
+            <td>A: checkout completo, notas<span class="sub">B: remessa, bancos, classificação</span></td>
+          </tr>
+          <tr>
+            <td class="k"><span class="chip e">EXTRA</span></td>
+            <td>llm.py, app.py, relatório de conferência, pendências explicadas, execução parametrizada para outubro</td>
+            <td>mesmos arquivos, com rastro 1:1 em todos e pendências em linguagem de negócio</td>
+            <td class="num">16h30<span class="sub">corte duro · critérios E1–E5 · tag <code>extra</code></span></td>
+            <td>B nos itens E1–E5<span class="sub">A em README, HIPOTESES e números do pitch</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Regras de corte</h2>
+    <ul class="gaps">
+      <li>Gate vermelho no horário: o time não começa o nível seguinte e corrige o atual, os dois juntos.</li>
+      <li>O Extra só começa com o Alvo verde às 15h30. Item incompleto às 16h30 é desligado, não commitado pela metade.</li>
+      <li>Sem <code>ANTHROPIC_API_KEY</code> o pipeline roda igual: o que nenhuma regra pega vira pendência.</li>
+      <li>O Streamlit é o primeiro item a ser cortado. Sem ele, a analista roda a CLI e abre os CSVs.</li>
+    </ul>
+  </section>
+</div>

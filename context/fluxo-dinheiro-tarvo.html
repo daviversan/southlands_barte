@@ -1,0 +1,325 @@
+<title>Fluxo de dinheiro Tarvo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: um diagrama largo (duas linhas de negócio cruzando as contas da Tarvo), seguido de tabelas de apoio. */
+:root {
+  --bg: #F2F4F5;
+  --surface: #FFFFFF;
+  --ink: #12212A;
+  --muted: #55646D;
+  --line: #C5CED3;
+  --tint: #E7EDF0;
+  --accent: #0A7D63;
+  --accent-soft: #D9EFE8;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0E171C;
+    --surface: #16232A;
+    --ink: #E6EEF1;
+    --muted: #94A5AE;
+    --line: #33454E;
+    --tint: #1B2B33;
+    --accent: #3FCBA4;
+    --accent-soft: #14382F;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0E171C;
+  --surface: #16232A;
+  --ink: #E6EEF1;
+  --muted: #94A5AE;
+  --line: #33454E;
+  --tint: #1B2B33;
+  --accent: #3FCBA4;
+  --accent-soft: #14382F;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 28px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+h1 { font-size: 28px; line-height: 1.15; font-weight: 600; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+.lede { color: var(--muted); max-width: 65ch; margin: 0; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+figure { margin: 0; }
+.figbox { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; }
+.figbox svg { display: block; width: 100%; min-width: 900px; height: auto; color: var(--ink); }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 10px; max-width: 80ch; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chip { display: inline-block; font-family: var(--font-num); font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chip.pass { border-color: var(--muted); background: var(--surface); color: var(--muted); }
+
+/* SVG */
+.node { fill: var(--surface); stroke: var(--ink); stroke-width: 1.25; }
+.zone { fill: var(--tint); stroke: var(--line); stroke-width: 1.25; }
+.memo { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+.flow { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+.flow.rev { stroke: var(--accent); }
+.m-rev { fill: var(--accent); }
+.tt { font-size: 13px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+.ts { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+.lb { font-size: 11px; fill: var(--ink); text-anchor: middle; }
+.lm { font-size: 11px; fill: var(--muted); text-anchor: middle; }
+.lx { font-size: 11px; fill: var(--ink); }
+.lxb { font-size: 12px; font-weight: 600; fill: var(--ink); }
+.lxm { font-size: 11px; fill: var(--muted); }
+.zone-t { font-size: 11px; font-weight: 600; letter-spacing: .08em; fill: var(--muted); }
+.lane { font-size: 11px; font-weight: 600; letter-spacing: .08em; fill: var(--muted); }
+.pill-r { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+.pill-p { fill: var(--surface); stroke: var(--muted); stroke-width: 1; }
+.pt-r { font-family: var(--font-num); font-size: 11px; font-weight: 500; fill: var(--accent); text-anchor: middle; }
+.pt-p { font-family: var(--font-num); font-size: 11px; fill: var(--muted); text-anchor: middle; }
+.badge { fill: var(--ink); }
+.badge-t { font-size: 10px; font-weight: 600; fill: var(--surface); text-anchor: middle; }
+
+/* Tables */
+.tbox { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); background: var(--tint); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-family: var(--font-num); font-weight: 500; white-space: nowrap; }
+td .sub { color: var(--muted); font-size: 13px; display: block; }
+.tbox.narrow table { min-width: 560px; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.card h3 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+.card .src { color: var(--muted); font-size: 13px; margin: 0 0 12px; font-family: var(--font-num); overflow-wrap: anywhere; }
+dl { margin: 0; display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+dd.rev, dt.rev { color: var(--accent); font-weight: 500; }
+dl .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); }
+
+.gaps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 75ch; }
+.gaps li { padding-left: 4px; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Fluxo de dinheiro da Tarvo</h1>
+    <p class="lede">Setembro/2026. Quem paga quem, por qual conta o dinheiro passa e qual taxa incide em cada etapa, nas duas linhas de negócio.</p>
+  </header>
+
+  <section>
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 1110 560" role="img" aria-label="Dois caminhos do dinheiro. Checkout: aluno paga a Orbe, que retém o MDR e liquida por TED no Banco Aurora da Tarvo, que repassa o líquido por Pix ao lojista. Remessa: o lojista paga por Pix no Banco Meridiano da Tarvo, que envia para a Ponte Câmbio converter e pagar a escola no exterior; a Ponte repassa 50% do spread realizado à Tarvo.">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="currentColor"/>
+            </marker>
+            <marker id="ahr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="m-rev" d="M0 0L10 5L0 10z"/>
+            </marker>
+          </defs>
+
+          <text class="lane" x="10" y="62">LINHA 1 · CHECKOUT</text>
+          <text class="lane" x="10" y="352">LINHA 2 · REMESSA</text>
+
+          <!-- Zona Tarvo -->
+          <rect class="zone" x="415" y="44" width="280" height="426" rx="10"/>
+          <text class="zone-t" x="431" y="66">TARVO PAGAMENTOS</text>
+
+          <!-- Nós -->
+          <rect class="node" x="10"  y="100" width="110" height="60" rx="6"/>
+          <text class="tt" x="65"  y="126">Aluno</text>
+          <text class="ts" x="65"  y="144">compra o curso</text>
+
+          <rect class="node" x="215" y="100" width="110" height="60" rx="6"/>
+          <text class="tt" x="270" y="126">Orbe</text>
+          <text class="ts" x="270" y="144">adquirente</text>
+
+          <rect class="node" x="435" y="100" width="240" height="60" rx="6"/>
+          <text class="tt" x="555" y="126">Banco Aurora</text>
+          <text class="ts" x="555" y="144">cc 4471-0 · conta principal</text>
+
+          <rect class="node" x="1000" y="100" width="100" height="60" rx="6"/>
+          <text class="tt" x="1050" y="126">Lojista</text>
+          <text class="ts" x="1050" y="144">recebe o líquido</text>
+
+          <rect class="node" x="10" y="380" width="110" height="60" rx="6"/>
+          <text class="tt" x="65" y="406">Lojista</text>
+          <text class="ts" x="65" y="424">paga a remessa</text>
+
+          <rect class="node" x="435" y="380" width="240" height="60" rx="6"/>
+          <text class="tt" x="555" y="406">Banco Meridiano</text>
+          <text class="ts" x="555" y="424">cc 90233-5 · conta de remessas</text>
+
+          <rect class="node" x="790" y="380" width="120" height="60" rx="6"/>
+          <text class="tt" x="850" y="406">Ponte Câmbio</text>
+          <text class="ts" x="850" y="424">parceiro de câmbio</text>
+
+          <rect class="node" x="1000" y="380" width="100" height="60" rx="6"/>
+          <text class="tt" x="1050" y="406">Escola</text>
+          <text class="ts" x="1050" y="424">no exterior</text>
+
+          <!-- Dentro da zona: transferência e saídas -->
+          <line class="flow" x1="455" y1="160" x2="455" y2="378" marker-end="url(#ah)"/>
+          <text class="lxb" x="469" y="204">Transferência entre contas</text>
+          <text class="lxm" x="469" y="220">ex.: R$ 350 mil em 02/09</text>
+          <text class="lxm" x="469" y="236">sem taxa e sem receita</text>
+
+          <rect class="memo" x="469" y="262" width="212" height="92" rx="6"/>
+          <text class="lxb" x="481" y="282">Saídas da Tarvo (Aurora)</text>
+          <text class="lx"  x="481" y="299">salários, impostos, aluguel, AWS</text>
+          <text class="lx"  x="481" y="315">tarifa do banco: R$ 389,00</text>
+          <text class="lxm" x="481" y="331">pacote PJ, lançado em 01/09</text>
+
+          <!-- C1 Aluno → Orbe -->
+          <path class="flow" d="M120 130 H213" marker-end="url(#ah)"/>
+          <text class="lb" x="167" y="112">cartão ou Pix</text>
+          <text class="lm" x="167" y="156">valor bruto</text>
+          <circle class="badge" cx="136" cy="130" r="9"/><text class="badge-t" x="136" y="133.5">C1</text>
+
+          <!-- C2 Orbe → Aurora -->
+          <path class="flow" d="M325 130 H433" marker-end="url(#ah)"/>
+          <rect class="pill-r" x="327" y="90" width="104" height="20" rx="10"/>
+          <text class="pt-r" x="379" y="104">MDR 0,89–3,79%</text>
+          <text class="lb" x="379" y="154">TED em lote</text>
+          <rect class="pill-r" x="327" y="162" width="104" height="20" rx="10"/>
+          <text class="pt-r" x="379" y="176">Antecip. 2,10%</text>
+          <text class="lm" x="379" y="198">se antecipar</text>
+          <circle class="badge" cx="345" cy="130" r="9"/><text class="badge-t" x="345" y="133.5">C2</text>
+
+          <!-- C3 Aurora → Lojista -->
+          <path class="flow" d="M675 130 H998" marker-end="url(#ah)"/>
+          <text class="lb" x="850" y="114">PIX ENVIADO · repasse do valor líquido</text>
+          <text class="lm" x="850" y="154">sem tarifa por Pix identificada</text>
+          <circle class="badge" cx="725" cy="130" r="9"/><text class="badge-t" x="725" y="133.5">C3</text>
+
+          <!-- R1 Lojista → Meridiano -->
+          <path class="flow" d="M120 410 H433" marker-end="url(#ah)"/>
+          <text class="lb" x="276" y="394">PIX RECEBIDO · valor da remessa</text>
+          <text class="lm" x="276" y="436">o lojista paga em reais</text>
+          <circle class="badge" cx="150" cy="410" r="9"/><text class="badge-t" x="150" y="413.5">R1</text>
+
+          <!-- R2 Meridiano → Ponte -->
+          <path class="flow" d="M675 410 H788" marker-end="url(#ah)"/>
+          <text class="lm" x="732" y="362">câmbio sobre a PTAX</text>
+          <rect class="pill-r" x="679" y="372" width="106" height="20" rx="10"/>
+          <text class="pt-r" x="732" y="386">spread 1,2–1,6%</text>
+          <rect class="pill-p" x="679" y="428" width="106" height="20" rx="10"/>
+          <text class="pt-p" x="732" y="442">IOF ≈ 0,38%</text>
+          <circle class="badge" cx="700" cy="410" r="9"/><text class="badge-t" x="700" y="413.5">R2</text>
+
+          <!-- R3 Ponte → Escola -->
+          <path class="flow" d="M910 410 H998" marker-end="url(#ah)"/>
+          <text class="lb" x="955" y="396">paga a escola</text>
+          <text class="lm" x="955" y="432">em moeda</text>
+          <text class="lm" x="955" y="446">estrangeira</text>
+          <circle class="badge" cx="926" cy="410" r="9"/><text class="badge-t" x="926" y="413.5">R3</text>
+
+          <!-- R4 Ponte → Tarvo (receita) -->
+          <path class="flow rev" d="M850 440 V522 H555 V472" marker-end="url(#ahr)"/>
+          <rect class="pill-r" x="616" y="496" width="172" height="20" rx="10"/>
+          <text class="pt-r" x="702" y="510">50% do spread realizado</text>
+          <text class="lm" x="702" y="542">crédito em 06/10 · contra NF de intermediação</text>
+          <circle class="badge" cx="850" cy="481" r="9"/><text class="badge-t" x="850" y="484.5">R4</text>
+        </svg>
+      </div>
+      <figcaption>Os dois caminhos só se encontram dentro das contas da Tarvo. A taxa aplicada pela Orbe em cada linha pode diferir da contratada, e é aí que nascem as divergências de taxa.</figcaption>
+      <div class="legend">
+        <span><span class="chip">0,00%</span> taxa que vira receita da Tarvo</span>
+        <span><span class="chip pass">0,00%</span> tributo ou repasse, não é receita</span>
+      </div>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Etapa a etapa</h2>
+    <div class="tbox">
+      <table>
+        <thead><tr><th>Etapa</th><th>O que acontece</th><th>Taxa</th><th>Fica com</th></tr></thead>
+        <tbody>
+          <tr><td class="k">C1</td><td>O aluno paga o lojista no cartão ou no Pix. A Orbe recebe a venda.</td><td>Nenhuma para o aluno</td><td>—</td></tr>
+          <tr><td class="k">C2</td><td>A Orbe retém o MDR de cada transação e liquida o restante por TED no Aurora.<span class="sub">líquido = valor bruto − taxa aplicada</span></td><td class="num">Débito 1,49% · Créd. à vista 2,69% · 2–6x 3,19% · 7–12x 3,79% · Pix 0,89%<span class="sub">valores mais comuns; variam por lojista</span></td><td>Tarvo (MDR)</td></tr>
+          <tr><td class="k">C2</td><td>Antecipação do recebível, quando o lojista pede.</td><td class="num">2,10%</td><td>Tarvo</td></tr>
+          <tr><td class="k">C3</td><td>A Tarvo repassa o líquido ao lojista por Pix, saindo do Aurora.</td><td>Sem tarifa por Pix identificada</td><td>—</td></tr>
+          <tr><td class="k">R1</td><td>O lojista paga a remessa por Pix, que entra no Meridiano.</td><td>—</td><td>—</td></tr>
+          <tr><td class="k">R2</td><td>A Tarvo envia para conversão. A Ponte aplica o câmbio sobre a PTAX de referência.</td><td class="num">Spread 1,2% a 1,6% sobre a PTAX<span class="sub">IOF ≈ 0,38% do valor em reais, calculado a partir do relatório da Ponte</span></td><td>Spread: dividido entre Ponte e Tarvo. IOF: tributo.</td></tr>
+          <tr><td class="k">R3</td><td>A Ponte paga a escola no exterior em moeda estrangeira.</td><td>—</td><td>—</td></tr>
+          <tr><td class="k">R4</td><td>A Ponte repassa à Tarvo a participação no spread realizado, depois que a Tarvo entrega a NF de intermediação.</td><td class="num">50% do spread realizado</td><td>Tarvo</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Taxas contratadas na planilha</h2>
+    <div class="tbox narrow">
+      <table>
+        <thead><tr><th>Taxa</th><th>Mais comum</th><th>Menor</th><th>Maior</th></tr></thead>
+        <tbody>
+          <tr><td>Débito</td><td class="num">1,49%</td><td class="num">1,39% <span class="sub">Andes</span></td><td class="num">1,49%</td></tr>
+          <tr><td>Crédito à vista</td><td class="num">2,69%</td><td class="num">2,19% <span class="sub">Bridge, desde 15/09</span></td><td class="num">2,69%</td></tr>
+          <tr><td>Crédito 2–6x</td><td class="num">3,19%</td><td class="num">2,89% <span class="sub">Novo Horizonte</span></td><td class="num">3,19%</td></tr>
+          <tr><td>Crédito 7–12x</td><td class="num">3,79%</td><td class="num">3,49% <span class="sub">EduAbroad</span></td><td class="num">3,79%</td></tr>
+          <tr><td>Pix</td><td class="num">0,89%</td><td class="num">0,79% <span class="sub">Fluente</span></td><td class="num">0,89%</td></tr>
+          <tr><td>Antecipação</td><td class="num">2,10%</td><td class="num">2,10%</td><td class="num">2,10%</td></tr>
+          <tr><td>Spread de remessa</td><td>não informado<span class="sub">em branco ou "padrão"</span></td><td class="num">1,20% <span class="sub">Mundo Aberto</span></td><td class="num">1,60% <span class="sub">Lisboa</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Duas linhas reais do data pack</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>Checkout · Casa do Estudante Viagens</h3>
+        <p class="src">TX88410932 · 01/09/2026 · crédito à vista</p>
+        <dl>
+          <dt>Valor bruto</dt><dd>R$ 608,88</dd>
+          <dt class="rev">Taxa aplicada 2,69%</dt><dd class="rev">R$ 16,37</dd>
+          <span class="sep"></span>
+          <dt>Líquido repassado ao lojista</dt><dd>R$ 592,51</dd>
+        </dl>
+      </article>
+      <article class="card">
+        <h3>Remessa · Maple Study</h3>
+        <p class="src">PC-0926-0002 · 5.402,22 NZD</p>
+        <dl>
+          <dt>PTAX de referência</dt><dd>3,2311</dd>
+          <dt>Taxa cliente</dt><dd>3,2796</dd>
+          <dt>Valor em reais</dt><dd>R$ 17.717,12</dd>
+          <dt>Spread realizado (1,50%)</dt><dd>R$ 262,01</dd>
+          <dt class="rev">Participação da Tarvo, 50%</dt><dd class="rev">≈ R$ 131,01</dd>
+          <span class="sep"></span>
+          <dt>IOF</dt><dd>R$ 67,33</dd>
+        </dl>
+      </article>
+    </div>
+  </section>
+
+  <section>
+    <h2>O que os arquivos não dizem</h2>
+    <ul class="gaps">
+      <li>Quanto a Orbe cobra da Tarvo pela adquirência. Só aparece a taxa que a Orbe aplicou ao lojista.</li>
+      <li>Se o repasse de 06/10 também cai no Meridiano, como o de agosto (R$ 61.884,12 em 04/09).</li>
+      <li>Qual é o spread padrão de remessa, usado quando a planilha está em branco ou diz "padrão".</li>
+      <li>As alíquotas de ISS, PIS e COFINS sobre a receita.</li>
+      <li>Se o Pix do lojista para a remessa já inclui o IOF.</li>
+    </ul>
+  </section>
+</div>
