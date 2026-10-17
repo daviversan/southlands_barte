@@ -1,4 +1,62 @@
 # Cadastro mestre de lojistas (EC <-> CNPJ).
 # Gerado por regra EXATA (EC da planilha de taxas) e completado só com confirmação humana.
-# Nunca por fuzzy match de nome. Preenchido no nível Mínimo (ingest/taxas).
-lojistas: {}
+# Nunca por fuzzy match de nome. Regerar: python -m src.ingest.taxas <planilha.xlsx> config/lojistas.yaml
+# A regeração só ACRESCENTA ECs novos; entradas existentes (inclusive confirmadas à mão) são mantidas.
+"lojistas":
+  "1000960410":
+    "cnpj": "23109187000161"
+    "lojista": "Oxford Prep Cursos Ltda"
+  "1014537966":
+    "cnpj": "68567965000102"
+    "lojista": "Dublin Hub Intercâmbio Ltda"
+  "1018325654":
+    "cnpj": "00520815000100"
+    "lojista": "Casa do Estudante Viagens Ltda"
+  "1020660828":
+    "cnpj": "16181276000153"
+    "lojista": "EduAbroad"
+  "1023622151":
+    "cnpj": "61720397000180"
+    "lojista": "Lisboa Cursos e Viagens Ltda"
+  "1037647039":
+    "cnpj": "17217888000111"
+    "lojista": "Mundo Aberto"
+  "1041180753":
+    "cnpj": "34671260000100"
+    "lojista": "Maple Study Assessoria Educacional Ltda"
+  "1058961395":
+    "cnpj": "85694108000184"
+    "lojista": "Andes Expedições Ltda"
+  "1061760196":
+    "cnpj": "53857560000123"
+    "lojista": "Canguru"
+  "1064304917":
+    "cnpj": "89779285000114"
+    "lojista": "Sol Nascente Viagens Ltda"
+  "1066100982":
+    "cnpj": "03229837000103"
+    "lojista": "Fluente Idiomas Online Ltda"
+  "1068443135":
+    "cnpj": "21394880000106"
+    "lojista": "Trilha Jovem Turismo Ltda"
+  "1070531381":
+    "cnpj": "08780784000120"
+    "lojista": "Campus Global Ltda"
+  "1074504011":
+    "cnpj": "95927868000148"
+    "lojista": "Rota Global Intercâmbio Ltda"
+  "1075624862":
+    "cnpj": "22224579000109"
+    "lojista": "Escola Bridge de Idiomas Ltda"
+  "1086291869":
+    "cnpj": "20987545000140"
+    "lojista": "Vela"
+  "1087276103":
+    "cnpj": "50900987000179"
+    "lojista": "Bagagem Livre Turismo Ltda"
+  "1098729012":
+    "cnpj": "67869675000142"
+    "lojista": "Bem-Vindo Exchange Ltda"
+  "1157874034":
+    "cnpj": "22348118000148"
+    "lojista": "Globo Trotter Viagens Ltda"

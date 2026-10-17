@@ -14,6 +14,17 @@ checkout:
   antecipacao_mesma_nota: true      # CONFIRMADO (P3)
   nf_tomador: lojista               # ASSUMIDO (P16)
   nf_saldo_nao_positivo: pendencia  # CONFIRMADO: não emite nota, vira pendência (Financeiro)
+  # Roteamento de venda cujo EC não está no cadastro (nível Mínimo). EC fora desta lista cai em
+  # CADASTRO_NAO_RESOLVIDO / Financeiro. Nunca resolve identidade por nome; só decide quem responde.
+  ec_sem_cadastro:
+    "1076801732":                   # Atlas Idiomas: só existe na aba "ANTIGO 2025" (P8, PARCIAL)
+      tipo: CONTRATO_AUSENTE
+      quem_decide: Comercial        # CONFIRMADO: Comercial decide; Atlas não é faturada até confirmar a taxa
+      motivo: sem contrato na aba vigente da planilha; a taxa é decidida pelo Comercial e a venda não é comissionada até lá.
+    "1043300981":                   # Horizonte Intercâmbio: Horizonte Viagens ou Novo Horizonte? (P7, ABERTA)
+      tipo: CONTRATO_AMBIGUO
+      quem_decide: Comercial        # ASSUMIDO: segue a tabela de tipos do contrato técnico
+      motivo: pode ser Horizonte Viagens ou Novo Horizonte (ambos sem EC na planilha); não adivinhar, uma pessoa precisa confirmar.
 
 remessa:
   participacao_tarvo: 0.5           # SABEMOS (e-mail da Ponte)

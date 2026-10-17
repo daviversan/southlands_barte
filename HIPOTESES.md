@@ -75,3 +75,11 @@ Não consta no `00_LEIA-ME.md`, no enunciado nem no `DICIONARIO_DADOS.md`. **[SA
 - Efeito na comissão de setembro (preliminar): estornos e reversões **abatem R$ 3.479,20** (estornos 867,71 de taxa Orbe + reversões 2.436,61 pela taxa aplicada, arredondadas pela regra Tarvo) em Dublin Hub, Maple Study, Mundo Aberto, Bridge, EduAbroad e Oxford Prep. Oxford Prep e Maple concentram as 3 reversões de antecipação (R$ 124 mil de principal).
 - **[ASSUMIDO]** Os ajustes pertencem à competência de setembro (data 30/09) e entram no mesmo fechamento. Pergunta nova **17**: os ajustes tardios são definitivos ou a Orbe pode mandar mais depois do fechamento (reabre?). Efeito até a resposta: o pipeline lê todos os arquivos Orbe da pasta, então qualquer novo arquivo é só rodar de novo.
 - Totais Orbe passam a ser **1.957 linhas**: 1.841 VENDA, 69 ESTORNO, 38 ANTECIPACAO, 9 REVERSAO; 116 não-VENDA.
+
+## 4. Mínimo, lado A: checkout (leitores, cadastro, cálculo)
+
+- **[CONFIRMADO, P1] M8:** comissão = `valor_bruto × taxa contratada`, sem custo da Orbe; `config/regras.yaml` (`checkout.base_comissao`).
+- **Cadastro mestre:** `config/lojistas.yaml` gerado da planilha por EC exato (19 ECs); regerar só acrescenta. Os 4 ECs da Orbe fora dele (Kiwi, Horizonte Intercâmbio, Horizonte Viagens, Atlas) viram pendência; **nenhum casamento por nome**.
+- **[ASSUMIDO] Roteamento de pendências** por `checkout.ec_sem_cadastro` (config): Atlas → `CONTRATO_AUSENTE`/Comercial (confirmado, P8); Horizonte Intercâmbio → `CONTRATO_AMBIGUO`/Comercial (segue a tabela do contrato técnico; quem decide não foi dito, P7); demais ECs → `CADASTRO_NAO_RESOLVIDO`/Financeiro.
+- **Resultado preliminar (data pack):** 1.841 vendas = 1.574 processadas + 267 em pendência (Kiwi + Horizonte Viagens 152, Horizonte Intercâmbio 69, Atlas 49, Globo Trotter 0 vendas); 18 lojistas com comissão; 116 não-VENDA fora de escopo (69 estornos, 38 antecipações, 9 reversões); 1.943 linhas do `01_` + 14 do `06_`.
+- **M7, revisão de 5 vendas (feita por A; falta a cruzada com B):** TX88410932 608,88×2,69% = 16,3789 → 16,38 (Orbe truncou 16,37); TX88410128 5.773,57×3,79% → 218,82; TX88416245 15.600,29×3,79% → 591,25; TX88436225 2.716,38×3,19% → 86,65; TX88444565 2.459,05×3,19% → 78,44. Todas batem com o rastro.
