@@ -125,7 +125,15 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             falhas = [c for c in checagens if not c.ok and c.bloqueia]
             st.caption(f"Conferência: {len(checagens)} checagens, {len(falhas)} falha(s).")
 
-    saidas = ler_saida(pasta_saida)
+    try:
+        saidas = ler_saida(pasta_saida)
+    except PermissionError as erro:
+        st.error(f"Sem permissão para ler o arquivo {erro.filename or pasta_saida}. "
+                 "Verifique as permissões da pasta de saída e se o arquivo está aberto em outro programa.")
+        return
+    except OSError as erro:
+        st.error(f"Não foi possível ler os arquivos de saída: {erro}")
+        return
     if not any(saidas[n] for n in ARQUIVOS_EMISSIVEIS):
         st.info("Nenhuma saída nesta pasta ainda. Rode o fechamento pela barra lateral.")
         return

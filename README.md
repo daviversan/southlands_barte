@@ -19,6 +19,10 @@ Os testes usam uma pasta `.pytest_tmp-<uuid>/` exclusiva por execução, ignorad
 pelo Git. Isso evita conflitos de permissões entre o usuário e a conta do
 sandbox no Windows. Um `--basetemp` explícito continua sendo respeitado.
 Os documentos gerados em `saida/` são ignorados; apenas `.gitkeep` é preservado.
+Na publicação, a pasta de preparação usa as permissões herdadas da pasta pai.
+Isso permite ler os CSVs no front mesmo quando o fechamento é executado pela
+conta do sandbox no Windows; uma pasta temporária privada transferia sua ACL
+restritiva para os arquivos ao movê-los.
 
 ## Outro mês (outubro em diante)
 

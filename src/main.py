@@ -10,10 +10,12 @@ from __future__ import annotations
 import argparse
 import re
 from collections import Counter
+from contextlib import contextmanager
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from tempfile import TemporaryDirectory
+import shutil
+from uuid import uuid4
 
 import yaml
 
@@ -32,6 +34,25 @@ from src.regras.pendencias import explicar_pendencias, validar_pendencia
 from src.regras.remessa import TIPOS_BLOQUEANTES, calcular_remessa, ref_ocorrencia
 
 RAIZ = Path(__file__).resolve().parent.parent
+
+
+@contextmanager
+def _pasta_publicacao(pai: Path):
+    """Staging exclusivo que herda as permissões normais da pasta de publicação.
+
+    TemporaryDirectory cria uma ACL privada no Windows/Python 3.13+, que os
+    CSVs preservam ao serem movidos e impede a leitura por outra conta.
+    """
+    pai = pai.resolve()
+    pasta = pai / f'.fechamento-{uuid4().hex}'
+    pasta.mkdir()  # modo padrão: herança de ACL; nome exclusivo, sem reutilização
+    try:
+        yield pasta
+    finally:
+        alvo = pasta.resolve()
+        if alvo.parent != pai or not alvo.name.startswith('.fechamento-'):
+            raise ValueError('Pasta de publicação fora do diretório esperado')
+        shutil.rmtree(alvo)
 
 # padrão de nome -> papel. A Orbe é descoberta pelo próprio leitor (01_ obrigatório, 06_ opcional).
 ARQUIVOS = {
@@ -300,7 +321,7 @@ def run(entrada: Path, competencia: str, saida: Path,
 
     # Só publica depois de gravar, reconferir o rastro e passar na conferência contra as entradas.
     saida.parent.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix=".fechamento-", dir=saida.parent) as temporaria:
+    with _pasta_publicacao(saida.parent) as temporaria:
         caminhos = gravador.gravar(temporaria)
         checagens = conferencia.conferir(temporaria, transacoes, relatorio, lancamentos, contratos)
         if any(not c.ok and c.bloqueia for c in checagens):

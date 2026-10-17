@@ -81,6 +81,19 @@ class _StreamlitFalso:
         return False
 
 
+def test_render_informa_acesso_negado_sem_quebrar(monkeypatch):
+    falso = _StreamlitFalso()
+    monkeypatch.setitem(sys.modules, 'streamlit', falso)
+    monkeypatch.setattr(app, 'executar', lambda *args: (False, 'Sem acesso', []))
+    def negar(_):
+        raise PermissionError(13, 'Permission denied', 'comissoes_por_lojista.csv')
+    monkeypatch.setattr(app, 'ler_saida', negar)
+    app.render()
+    mensagens = [args[0] for nome, args, _ in falso.chamadas if nome == 'error']
+    assert any('Sem permissão' in m and 'comissoes_por_lojista.csv' in m for m in mensagens)
+    assert not any(nome == 'tabs' for nome, _, _ in falso.chamadas)
+
+
 @pytest.mark.skipif(not PACK.exists(), reason="data pack ausente")
 def test_render_percorre_todas_as_telas(tmp_path, monkeypatch):
     falso = _StreamlitFalso()
