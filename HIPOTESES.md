@@ -118,3 +118,18 @@ Verificações do data pack, não constantes do algoritmo; o número final sai d
 - **Remessa:** 233 = 228 válidas + 4 `CONTESTACAO` + 1 `OPERACAO_REPETIDA`; base R$ 79.085,76 (78.073,59 − 821,88 + 1.834,05); 41 divergências, R$ 1.419,05.
 - **Bancos:** 84 Aurora + 100 Meridiano = 184, todas por regra; pendências: Pix sem identificação (R$ 7.350,00) e TED sem contrapartida (−R$ 300.000,00).
 - **Notas:** 18 CHECKOUT + 1 REMESSA. Σ NF CHECKOUT = R$ 191.464,34 **se nenhum dos 18 lojistas tiver saldo ≤ 0** (a verificar).
+
+### 5.2 Implementação de B e verificação
+
+As decisões H1–H8 orientam a implementação de B: arredondamento por operação
+(comissão R$ 39.543,45), referência da repetida com `#2`, janela de contrapartida
+de 3 dias e conta vazia exclusivamente para `HUMANO` com confiança zero.
+A tolerância configurada em fração é convertida para pontos percentuais.
+Possível duplicidade apenas sinaliza; spread padrão não gera divergência nem
+pendência. No modo `despesa`, INSS/FGTS exigem classificação humana.
+
+Os testes de B conferem remessa e bancos contra as entradas reais e validam
+publicação determinística com interfaces sintéticas de checkout/notas de A.
+A reconciliação obtida é R$ 78.073,59 − R$ 821,88 − (−R$ 1.834,05) =
+R$ 79.085,76 de base. Não foi realizada revisão cruzada por outra pessoa;
+o fechamento real integrado aguarda a entrega de A descrita no README.

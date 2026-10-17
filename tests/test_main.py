@@ -57,7 +57,7 @@ def fechamento(tmp_path, monkeypatch):
 
 def executar(fechamento, destino):
     entrada, regras, cadastro, _, _ = fechamento
-    return main.run(entrada, "2026-09", destino, regras, cadastro)
+    return main.run_minimo(entrada, "2026-09", destino, regras, cadastro)
 
 
 def test_publica_seis_csvs_rastro_e_resumo(fechamento, tmp_path, capsys):

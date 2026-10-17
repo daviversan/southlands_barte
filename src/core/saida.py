@@ -137,7 +137,11 @@ class Saida:
         if sobrando:
             raise SaidaError(f"{arquivo}: colunas não previstas {sorted(sobrando)}")
 
-        campos = {c: self._validar(arquivo, esq, c, linha[c]) for c in linha}
+        humano = arquivo == 'lancamentos_classificados' and linha.get('metodo') == 'HUMANO'
+        if humano and _como_decimal('confianca', linha['confianca']) != 0:
+            raise SaidaError('Lançamento HUMANO exige confiança zero')
+        campos = {c: ('' if humano and c == 'conta_codigo' and not linha[c]
+                      else self._validar(arquivo, esq, c, linha[c])) for c in linha}
         valor = q2(_como_decimal(esq.valor, linha[esq.valor]))
         campos[esq.valor] = _fmt_decimal(valor)
 

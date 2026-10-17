@@ -41,3 +41,127 @@ remessa:
 bancos:
   folha_e_impostos_de_08: baixa_provisao   # ASSUMIDO (P12): baixa_provisao | despesa
   confianca_minima_ia: 0.8                 # Extra: abaixo disso vira pendência HUMANO
+
+  aurora_ref_offset: 0
+  janela_contrapartida_dias: 3
+  regras:
+    - id: pix_contabilidade
+      banco: AURORA
+      padrao: ^PIX ENVIADO CONTABILIDADE
+      conta: 4.2.06
+    - id: pix_sem_identificacao
+      banco: AURORA
+      padrao: ^PIX RECEBIDO .*SEM IDENTIFICACAO
+      conta: 1.1.09.002
+      pendencia: CREDITO_NAO_IDENTIFICADO
+    - id: recebivel_orbe
+      banco: AURORA
+      padrao: ^TED RECEBIDA .*ORBE
+      conta: 1.1.03.001
+    - id: repasse_lojista
+      banco: AURORA
+      padrao: '^PIX ENVIADO '
+      conta: 2.1.01.001
+    - id: transferencia_saida
+      banco: AURORA
+      padrao: ^TRANSF ENTRE CONTAS
+      conta: 1.1.09.001
+      contrapartida: saida
+    - id: devolucao_pix
+      banco: AURORA
+      padrao: ^DEVOLUCAO PIX
+      conta: 2.1.01.002
+    - id: tarifa_aurora
+      banco: AURORA
+      padrao: '^TAR '
+      conta: 4.2.01
+    - id: condominio
+      banco: AURORA
+      padrao: CONDOMINIO
+      conta: 4.2.02
+    - id: infraestrutura
+      banco: AURORA
+      padrao: AMAZON|AWS
+      conta: 4.2.03
+    - id: google
+      banco: AURORA
+      padrao: GOOGLE
+      conta: 4.2.04
+    - id: pis
+      banco: AURORA
+      padrao: DARF .*PIS
+      conta: 2.1.03.001
+    - id: cofins
+      banco: AURORA
+      padrao: DARF .*COFINS
+      conta: 2.1.03.002
+    - id: irrf
+      banco: AURORA
+      padrao: DARF .*IRRF
+      conta: 2.1.03.004
+    - id: iss
+      banco: AURORA
+      padrao: ^PAGTO ISS
+      conta: 2.1.03.003
+    - id: salarios
+      banco: AURORA
+      padrao: SALARIOS
+      conta: 2.1.04.001
+      contas_por_modo:
+        baixa_provisao: 2.1.04.001
+        despesa: 4.1.01
+    - id: inss
+      banco: AURORA
+      padrao: ^GPS INSS
+      conta: 2.1.04.002
+      contas_por_modo:
+        baixa_provisao: 2.1.04.002
+        despesa: null
+    - id: fgts
+      banco: AURORA
+      padrao: ^GRF FGTS
+      conta: 2.1.04.003
+      contas_por_modo:
+        baixa_provisao: 2.1.04.003
+        despesa: null
+    - id: pix_remessa
+      banco: MERIDIANO
+      padrao: '^PIX RECEB '
+      conta: 2.1.02.001
+    - id: liquidacao_ponte
+      banco: MERIDIANO
+      padrao: ^TED ENVIADA PONTE .*LIQ OPERACOES
+      conta: 2.1.02.001
+    - id: transferencia_entrada
+      banco: MERIDIANO
+      padrao: ^TED RECEBIDA TARVO .*MESMA TITULARIDADE
+      conta: 1.1.09.001
+      contrapartida: entrada
+    - id: comissao_ponte
+      banco: MERIDIANO
+      padrao: ^TED RECEB PONTE .*REPASSE COMISSAO
+      conta: 1.1.03.002
+    - id: aplicacao
+      banco: MERIDIANO
+      padrao: ^APLICACAO .*CDB
+      conta: 1.1.02.001
+    - id: resgate
+      banco: MERIDIANO
+      padrao: ^RESGATE .*CDB
+      conta: 1.1.02.001
+    - id: rendimento
+      banco: MERIDIANO
+      padrao: ^RENDIMENTO
+      conta: 3.2.01
+    - id: iof
+      banco: MERIDIANO
+      padrao: ^IOF
+      conta: 4.3.01
+    - id: seguro
+      banco: MERIDIANO
+      padrao: ^SEGURO
+      conta: 4.2.05
+    - id: tarifa_meridiano
+      banco: MERIDIANO
+      padrao: ^TARIFA
+      conta: 4.2.01
