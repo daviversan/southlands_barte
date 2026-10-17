@@ -260,7 +260,7 @@ O novo `06_` tem 14 linhas: uma venda e 13 lançamentos negativos. No mínimo, a
 
 Revisão baseada no commit `9378773` e no arquivo adicional de ajustes. Já existem normalização, gravador/rastro, configurações iniciais, hipóteses e testes. Cadastro preenchido, leitores, cálculo, pendências e CLI ainda faltam; a fundação não executa o fechamento.
 
-- Referência da fase 0: Python 3.12. `requirements.txt`: pandas >=2.2, openpyxl >=3.1, PyYAML >=6.0 e pytest >=8.0. IA e Streamlit são opcionais.
+- Referência da fase 0: Python 3.12. `requirements.txt`: pandas >=2.2, openpyxl >=3.1, PyYAML >=6.0 e pytest >=8.0. Streamlit é opcional.
 - `pytest.ini` já define `pythonpath = .` e `testpaths = tests`. Executar na raiz.
 - O Git não instala dependências nem fornece o ambiente virtual. Com Python 3.12 disponível no launcher Windows, preparar com os comandos abaixo.
 

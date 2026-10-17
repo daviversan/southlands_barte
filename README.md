@@ -1,24 +1,44 @@
-# Fechamento Tarvo — nível Alvo
+# Fechamento Tarvo — níveis Alvo e Extra
 
-Interface de operação: CLI e CSVs. Um comando lê os arquivos do mês **como vêm** e gera os seis
-CSVs do enunciado: comissões de checkout e remessa, divergências de taxa, notas a emitir,
-lançamentos bancários classificados, pendências e rastro. Não precisa de `ANTHROPIC_API_KEY`.
+Interface de operação: CLI e CSVs (e, opcionalmente, uma tela em Streamlit). Um comando lê os
+arquivos do mês **como vêm** e gera os seis CSVs do enunciado: comissões de checkout e remessa,
+divergências de taxa, notas a emitir, lançamentos bancários classificados, pendências e rastro.
+Não usa API externa nem chave.
 
-Na raiz do projeto, com Python 3.12 e as dependências de `requirements.txt` instaladas num venv:
+De um clone limpo, com Python 3.12:
 
 ```bash
+git clone <url-do-repositorio> southlands_barte && cd southlands_barte
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
-python -m pytest -q
 python -m src.main --entrada context/tarvo_data_pack --competencia 2026-09 --saida saida/
 ```
+
+Testes: `python -m pytest -q`.
 
 Os testes usam uma pasta `.pytest_tmp-<uuid>/` exclusiva por execução, ignorada
 pelo Git. Isso evita conflitos de permissões entre o usuário e a conta do
 sandbox no Windows. Um `--basetemp` explícito continua sendo respeitado.
 Os documentos gerados em `saida/` são ignorados; apenas `.gitkeep` é preservado.
 
-Outro mês é o mesmo comando com outra pasta e outra competência. `--regras` e `--cadastro`
-aceitam caminhos alternativos; os padrões são `config/regras.yaml` e `config/lojistas.yaml`.
+## Outro mês (outubro em diante)
+
+É o mesmo comando com outra pasta e outra competência; não há data, EC, CNPJ ou nome de lojista no
+código (um teste varre `src/` atrás deles):
+
+```bash
+python -m src.main --entrada <pasta-de-outubro> --competencia 2026-10 --saida saida/
+```
+
+- Os arquivos são achados pelo **padrão do nome** (tabela abaixo) e o cabeçalho de cada um pelo
+  **conteúdo**, não pelo número da linha. O arquivo de ajustes da Orbe (`06_`) é opcional.
+- Lojista novo, sem cadastro, vira **pendência**, nunca erro. Para liberar: confirmar o EC e
+  registrá-lo em `config/lojistas.yaml`; taxa nova vai na aba "Taxas vigentes" da planilha. Depois,
+  rodar de novo.
+- Linha de um mês diferente do `--competencia` interrompe a execução sem tocar na saída anterior.
+- `tests/test_extra.py` roda o data pack inteiro deslocado para outubro, sem mudar código.
+
+`--regras` e `--cadastro` aceitam caminhos alternativos; os padrões são `config/regras.yaml` e
+`config/lojistas.yaml`.
 
 ## Entradas (descobertas por padrão de nome)
 
@@ -42,8 +62,15 @@ aceitam caminhos alternativos; os padrões são `config/regras.yaml` e `config/l
   encerram a execução com erro e **preservam a saída anterior** (grava em pasta temporária e só
   então substitui os CSVs).
 
-O comando imprime o resumo de conservação: Orbe por tipo e por arquivo, reconciliação do rodapé da
-Ponte, bancos por regra e pendências por tipo e por `quem_decide`.
+- **Conferência automática** (`src/core/conferencia.py`): antes de publicar, os CSVs gravados são
+  relidos e cruzados com as entradas — Σ de cada arquivo × Σ do rastro, rastro 1:1 de divergências,
+  lançamentos e pendências, toda origem do rastro existe numa entrada, cada linha da Orbe, da Ponte
+  e dos extratos aparece uma vez, totais de bruto, spread e extrato fecham, NF = comissões. Se uma
+  checagem falhar, o comando termina com erro e a saída anterior fica intacta.
+
+O comando imprime o resumo de conservação (Orbe por tipo e por arquivo, reconciliação do rodapé da
+Ponte, bancos por regra, pendências por tipo e por `quem_decide`) e o relatório da conferência,
+uma linha por checagem com `[ok]`, `[aviso]` ou `[FALHA]`.
 
 ## Onde estão as regras
 
@@ -62,13 +89,30 @@ Nenhum CNPJ, EC, nome de lojista, padrão de extrato ou conta contábil está no
   ocorrem) e REMESSA (50% do `Spread R$` realizado, por CNPJ, arredondado por operação).
 - `divergencias_taxa`: positivo = o lojista pagou a mais; estorno de venda divergente é negativo.
   Remessa usa o valor cheio. Divergência é só reportada; não é restituição.
-- `pendencias`: o valor de uma linha bloqueada é o **bruto assinado** (Orbe), o `Spread R$`
-  (Ponte) ou o valor do lançamento (bancos), não a comissão perdida. A operação repetida da Ponte
-  aparece como `<Nº Operação>#2`.
+- `pendencias`: `motivo` em linguagem de negócio, `quem_decide` de uma lista fechada (Financeiro,
+  Comercial, Ponte, Contador) e a coluna extra `sugestao` com o próximo passo. O catálogo por tipo
+  fica em `config/regras.yaml` (`pendencias.tipos`). O valor de uma linha bloqueada é o valor bruto
+  da transação (Orbe), o spread (Ponte) ou o valor do lançamento (bancos), não a comissão perdida.
+  A operação repetida da Ponte aparece como `<Nº Operação>#2`.
+- `rastro`: cada número publicado aponta para as linhas de origem (`arquivo_origem`, `ref_origem`)
+  e a soma do rastro é igual ao valor publicado, ao centavo.
+
+## Tela (opcional)
+
+Para quem prefere não abrir CSVs: rodar o fechamento, ver os totais e a conferência, escolher um
+`id_saida` e ver as linhas de origem, e a fila de pendências por `quem_decide`.
+
+```bash
+pip install streamlit
+streamlit run src/app.py
+```
+
+A tela não tem regra de negócio: chama o mesmo `main.run()` da CLI e só lê `saida/`.
 
 ## Limitações conhecidas
 
-- Sem fallback de IA e sem interface gráfica (nível Extra): linha bancária sem regra vira
-  pendência `HUMANO`; a analista usa a CLI e abre os CSVs.
+- Linha bancária sem regra vira pendência `HUMANO` para o Contador; não há classificação por IA.
+- A tela Streamlit foi testada com um Streamlit simulado (o pacote não pôde ser instalado no
+  ambiente de desenvolvimento); falta abrir e conferir visualmente.
 - Perguntas abertas ao financeiro (spread padrão, Horizonte/Kiwi, ressalva, provisão de folha,
   tomador da NF de checkout, `ref_origem` do Aurora) estão parametrizadas e listadas em `HIPOTESES.md`.

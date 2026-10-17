@@ -177,7 +177,7 @@ class LancamentoClassificado(TypedDict):
     descricao: str
     valor: Decimal
     conta_codigo: str
-    metodo: Literal["REGRA", "IA", "HUMANO"]   # no Alvo, só REGRA e HUMANO
+    metodo: Literal["REGRA", "IA", "HUMANO"]   # só REGRA e HUMANO são usados; IA existe só no enum do enunciado
     confianca: Decimal                     # 1 para REGRA; 0 para HUMANO
     regra_id: str | None                   # auditoria; NÃO vai ao CSV
     origens: list[Origem]                  # uma: (arquivo_origem, ref_origem, valor)

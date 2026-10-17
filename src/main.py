@@ -1,7 +1,9 @@
-"""CLI do fechamento (nível Alvo): leitores, regras de A e B, conservação e publicação.
+"""CLI do fechamento (níveis Alvo e Extra): leitores, regras de A e B, conservação e publicação.
 
 Só este módulo fala com `Saida`. Os módulos de regras devolvem registros com origens; aqui eles são
-conferidos (cada linha de entrada uma vez, Σ rastro = valor), ordenados, emitidos e publicados.
+conferidos (cada linha de entrada uma vez, Σ rastro = valor), ordenados, emitidos e gravados numa
+pasta temporária. A conferência do Extra (`core/conferencia.py`) relê os CSVs gravados contra as
+entradas; só então a saída é publicada.
 """
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ from tempfile import TemporaryDirectory
 
 import yaml
 
+from src.core import conferencia
 from src.core.contratos import ResultadoFechamento
 from src.core.saida import ESQUEMAS, Saida
 from src.ingest.bancos import ler_aurora, ler_meridiano
@@ -25,7 +28,7 @@ from src.ingest.taxas import ler_taxas
 from src.regras.checkout import calcular_checkout
 from src.regras.classificacao import classificar_lancamentos
 from src.regras.notas import calcular_notas
-from src.regras.pendencias import validar_pendencia
+from src.regras.pendencias import explicar_pendencias, validar_pendencia
 from src.regras.remessa import TIPOS_BLOQUEANTES, calcular_remessa, ref_ocorrencia
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -200,7 +203,8 @@ def _emitir_todos(r: ResultadoFechamento) -> Saida:
     gravador = Saida()
 
     def emitir(nome, registro):
-        colunas = [c for c in ESQUEMAS[nome].colunas if c != "id_saida"]
+        esquema = ESQUEMAS[nome]
+        colunas = [c for c in esquema.colunas if c != "id_saida"] + [c for c in esquema.extras if c in registro]
         gravador.emitir(nome, {c: registro[c] for c in colunas}, registro["origens"])
 
     ordem_linha = {"CHECKOUT": 0, "REMESSA": 1}
@@ -266,7 +270,7 @@ def run(entrada: Path, competencia: str, saida: Path,
     cadastro = _carregar_yaml(Path(cadastro_path)).get("lojistas")
     if not isinstance(cadastro, dict):
         raise ValueError("Cadastro deve conter o mapa lojistas")
-    for secao in ("checkout", "remessa", "bancos", "notas"):
+    for secao in ("checkout", "remessa", "bancos", "notas", "pendencias"):
         if not isinstance(regras.get(secao), dict):
             raise ValueError(f"Regras devem conter o mapa {secao}")
     arquivos = _descobrir(entrada)
@@ -287,20 +291,27 @@ def run(entrada: Path, competencia: str, saida: Path,
     notas, pendencias_notas = calcular_notas(checkout["comissoes"] + remessa["comissoes"], competencia, regras)
     resultado: ResultadoFechamento = {
         "checkout": checkout, "remessa": remessa, "bancos": bancos, "notas": notas,
-        "pendencias": checkout["pendencias"] + pendencias_notas + remessa["pendencias"] + bancos["pendencias"],
+        "pendencias": explicar_pendencias(
+            checkout["pendencias"] + pendencias_notas + remessa["pendencias"] + bancos["pendencias"], regras),
     }
     analiticas = {c["codigo"] for c in plano if c["aceita_lancto"]}
     _conferir_conservacao(transacoes, relatorio, lancamentos, analiticas, resultado)
     gravador = _emitir_todos(resultado)
 
-    # Só publica depois de gravar e reconferir todos os CSVs em disco.
+    # Só publica depois de gravar, reconferir o rastro e passar na conferência contra as entradas.
     saida.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".fechamento-", dir=saida.parent) as temporaria:
         caminhos = gravador.gravar(temporaria)
+        checagens = conferencia.conferir(temporaria, transacoes, relatorio, lancamentos, contratos)
+        if any(not c.ok and c.bloqueia for c in checagens):
+            conferencia.imprimir(checagens)
+            conferencia.exigir(checagens)
         saida.mkdir(parents=True, exist_ok=True)
         for caminho in caminhos.values():
             caminho.replace(saida / caminho.name)
     _imprimir_resumo(resultado)
+    conferencia.imprimir(checagens)
+    resultado["conferencia"] = checagens
     return resultado
 
 

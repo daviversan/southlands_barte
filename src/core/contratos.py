@@ -68,9 +68,10 @@ class PendenciaCalculada(TypedDict):
     tipo: str
     ref_origem: str
     valor_brl: Decimal
-    motivo: str
-    quem_decide: Literal["Financeiro", "Comercial"]
+    motivo: str  # linguagem de negócio (PLANO E2)
+    quem_decide: Literal["Financeiro", "Comercial", "Ponte", "Contador"]  # saida.QUEM_DECIDE
     origens: list[Origem]
+    sugestao: NotRequired[str]  # próximo passo; preenchida por regras.pendencias.explicar_pendencias
 
 
 class DivergenciaCalculada(TypedDict):
@@ -202,4 +203,5 @@ class ResultadoFechamento(TypedDict):
     remessa: ResultadoRemessa
     bancos: ResultadoBancos
     notas: list[NotaCalculada]
-    pendencias: list[PendenciaCalculada]  # consolidadas, validadas
+    pendencias: list[PendenciaCalculada]  # consolidadas, explicadas e validadas
+    conferencia: NotRequired[list]  # list[core.conferencia.Checagem], preenchida após a publicação

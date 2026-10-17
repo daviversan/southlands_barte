@@ -62,11 +62,28 @@ _QUEM = {
 }
 
 
-class _Problema(tuple):
-    """(tipo, quem_decide, motivo)"""
+# Nomes de negócio para texto de motivo (o enum da fonte continua no dado).
+_TIPO_LEGIVEL = {
+    TIPO_VENDA: "Venda",
+    TIPO_ESTORNO: "Estorno",
+    TIPO_ANTECIPACAO: "Antecipação",
+    TIPO_REVERSAO: "Reversão de antecipação",
+}
+_FAIXA_LEGIVEL = {
+    "DEBITO": "débito",
+    "CREDITO_A_VISTA": "crédito à vista",
+    "CREDITO_2_6": "crédito parcelado em 2 a 6 vezes",
+    "CREDITO_7_12": "crédito parcelado em 7 a 12 vezes",
+    "PIX": "Pix",
+    "ANTECIPACAO": "antecipação",
+}
 
-    def __new__(cls, tipo: str, motivo: str, quem: str | None = None):
-        return super().__new__(cls, (tipo, quem or _QUEM[tipo], motivo))
+
+class _Problema(tuple):
+    """(tipo, quem_decide, motivo, sugestao específica ou None)"""
+
+    def __new__(cls, tipo: str, motivo: str, quem: str | None = None, sugestao: str | None = None):
+        return super().__new__(cls, (tipo, quem or _QUEM[tipo], motivo, sugestao))
 
 
 def _chave(texto) -> str:
@@ -80,6 +97,10 @@ def _fmt(valor: Decimal) -> str:
     sinal = "-" if inteiro.startswith("-") else ""
     inteiro = inteiro.lstrip("-")
     return f"{sinal}{int(inteiro):,}".replace(",", ".") + f",{frac}"
+
+
+def _data_br(iso: str | None) -> str:
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}" if iso else "data não informada"
 
 
 def faixa_da_venda(modalidade: str | None, parcelas: int | None) -> str:
@@ -122,11 +143,12 @@ def _problema_de_identidade(t: TransacaoOrbe, rotas: dict) -> _Problema:
     """EC fora do cadastro. Roteamento especial vem de `checkout.ec_sem_cadastro` (config), senão genérico."""
     rota = rotas.get(t["ec"])
     if rota:
-        return _Problema(rota["tipo"], f"EC {t['ec']} ({t['nome_origem']}): {rota['motivo']}", rota.get("quem_decide"))
+        return _Problema(rota["tipo"], f"{t['nome_origem']} (EC {t['ec']} na Orbe): {rota['motivo']}",
+                         rota.get("quem_decide"), rota.get("sugestao"))
     return _Problema(
         "CADASTRO_NAO_RESOLVIDO",
-        f"EC {t['ec']} ({t['nome_origem']}) não consta no cadastro de lojistas; "
-        "o nome não é usado para identificar o lojista.",
+        f"{t['nome_origem']} (EC {t['ec']} na Orbe) não consta no cadastro de lojistas da Tarvo, então não "
+        "sabemos de qual contrato é. Lojista não é identificado pelo nome.",
     )
 
 
@@ -134,26 +156,29 @@ def _resolver_contrato(t, data, cnpj_cadastro, por_ec) -> tuple[ContratoTaxa | N
     """Contrato do EC vigente em `data` (a data de vigência do tipo, não necessariamente a do movimento)."""
     candidatos = por_ec.get(t["ec"], [])
     if not candidatos:
-        return None, _Problema("CONTRATO_AUSENTE", f"EC {t['ec']} está no cadastro mas não tem contrato de taxas na planilha vigente.")
+        return None, _Problema("CONTRATO_AUSENTE", f"O EC {t['ec']} está no cadastro, mas não há contrato de taxas para ele na aba vigente da planilha.")
     divergentes = sorted({c["ref_origem"] for c in candidatos if c["cnpj"] != cnpj_cadastro})
     if divergentes:
         return None, _Problema(
             "CONTRATO_AMBIGUO",
-            f"CNPJ do cadastro ({cnpj_cadastro}) difere do CNPJ da planilha para o EC {t['ec']} ({', '.join(divergentes)}).",
+            f"O CNPJ do cadastro ({cnpj_cadastro}) não é o mesmo da planilha para o EC {t['ec']} "
+            f"({', '.join(divergentes)}); não sabemos qual contrato vale.",
         )
     cobrindo = [c for c in candidatos if _cobre(c, data)]
     if not cobrindo:
         if not any(c["ativo"] for c in candidatos):
-            return None, _Problema("CONTRATO_INATIVO", f"Contrato do EC {t['ec']} está inativo na planilha.")
+            return None, _Problema("CONTRATO_INATIVO", f"O contrato do EC {t['ec']} está marcado como inativo na planilha.")
         return None, _Problema(
             "VIGENCIA_SEM_COBERTURA",
-            f"Nenhuma vigência do EC {t['ec']} cobre a data {data}.",
+            f"Nenhum contrato do EC {t['ec']} estava vigente em {_data_br(data)}.",
         )
     if len(cobrindo) > 1:
         refs = ", ".join(c["ref_origem"] for c in cobrindo)
-        return None, _Problema("CONTRATO_AMBIGUO", f"Mais de uma vigência cobre {data} para o EC {t['ec']} ({refs}).")
+        return None, _Problema("CONTRATO_AMBIGUO", f"Há mais de um contrato do EC {t['ec']} vigente em {_data_br(data)} "
+                                                   f"({refs}); não sabemos qual taxa vale.")
     if not cobrindo[0]["ativo"]:
-        return None, _Problema("CONTRATO_INATIVO", f"Contrato do EC {t['ec']} está inativo na planilha ({cobrindo[0]['ref_origem']}).")
+        return None, _Problema("CONTRATO_INATIVO", f"O contrato do EC {t['ec']} está marcado como inativo na planilha "
+                                                   f"({cobrindo[0]['ref_origem']}).")
     return cobrindo[0], None
 
 
@@ -218,7 +243,7 @@ def _avaliar_linha(t, cadastro, por_ec, rotas, por_id, estornados):
         elif faixa and contrato["taxas_pct"][faixa] is None:
             problemas.append(_Problema(
                 "TAXA_AUSENTE",
-                f"Contrato {contrato['ref_origem']} não tem taxa para a faixa {faixa}.",
+                f"O contrato ({contrato['ref_origem']}) não tem taxa para a faixa {_FAIXA_LEGIVEL.get(faixa, faixa)}.",
             ))
 
     if problemas:
@@ -229,18 +254,22 @@ def _avaliar_linha(t, cadastro, por_ec, rotas, por_id, estornados):
 
 def _pendencia_de_linha(t: TransacaoOrbe, problemas: list[_Problema]) -> PendenciaCalculada:
     bruto = t["valor_bruto"] if t["valor_bruto"] is not None else Decimal("0")
-    base = (f"Valor da pendência = valor bruto assinado do lançamento {t['tipo_lancamento']} (R$ {_fmt(bruto)}), "
-            "não a comissão, que ainda é desconhecida. A linha não entrou na comissão.")
-    tipo, quem, _ = problemas[0]
-    motivo = " | ".join(p[2] for p in problemas) + " " + base
-    return {
+    tipo_legivel = _TIPO_LEGIVEL.get(_chave(t["tipo_lancamento"]), f"Lançamento {t['tipo_lancamento']}")
+    base = (f"{tipo_legivel} de R$ {_fmt(bruto)} em {_data_br(t['data_movimento'])} ficou fora da comissão do mês. "
+            "O valor mostrado é o valor bruto da transação, não a comissão, que só pode ser calculada depois "
+            "da decisão.")
+    tipo, quem, _, sugestao = problemas[0]
+    pendencia: PendenciaCalculada = {
         "tipo": tipo,
         "ref_origem": t["ref_origem"],
         "valor_brl": bruto,
-        "motivo": motivo,
+        "motivo": " | ".join(p[2] for p in problemas) + " " + base,
         "quem_decide": quem,
         "origens": [Origem(t["arquivo_origem"], t["ref_origem"], bruto)],
     }
+    if sugestao:
+        pendencia["sugestao"] = sugestao
+    return pendencia
 
 
 def _divergencia(t, cnpj, taxa_contratada, limiar) -> DivergenciaCalculada | None:
@@ -270,8 +299,9 @@ def _pendencias_cadastrais(contratos: list[ContratoTaxa]) -> list[PendenciaCalcu
             continue  # só remessa: não é problema de checkout
         if c["ec"] is None:
             tipo, motivo = "CADASTRO_NAO_RESOLVIDO", (
-                f"{c['lojista']} (CNPJ {c['cnpj']}) tem taxas de cartão/Pix na planilha mas não tem EC da Orbe; "
-                "vendas só serão ligadas a este contrato depois que uma pessoa confirmar o EC."
+                f"{c['lojista']} (CNPJ {c['cnpj']}) tem taxas de cartão/Pix na planilha, mas sem o código de "
+                "estabelecimento (EC) da Orbe; enquanto o EC não for confirmado, as vendas não podem ser ligadas "
+                "a este contrato."
             )
         elif not c["ativo"]:
             tipo, motivo = "CONTRATO_INATIVO", (
@@ -284,7 +314,7 @@ def _pendencias_cadastrais(contratos: list[ContratoTaxa]) -> list[PendenciaCalcu
             "tipo": tipo,
             "ref_origem": c["ref_origem"],
             "valor_brl": Decimal("0"),
-            "motivo": motivo + " Pendência cadastral: valor zero.",
+            "motivo": motivo + " É um ajuste de cadastro, sem valor no fechamento.",
             "quem_decide": _QUEM[tipo],
             "origens": [Origem(c["arquivo_origem"], c["ref_origem"], Decimal("0"))],
         })

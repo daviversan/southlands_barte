@@ -56,7 +56,7 @@ def test_repetida_negativo_e_reconciliacao():
     rep, cont = por_tipo["OPERACAO_REPETIDA"], por_tipo["CONTESTACAO"]
     assert (rep["ref_origem"], rep["valor_brl"], rep["origens"][0].ref) == ("PC-1#2", D("821.88"), "PC-1#2")
     assert (cont["ref_origem"], cont["valor_brl"], cont["quem_decide"]) == ("PC-2", D("-687.52"), "Financeiro")
-    assert "trava de 2 horas excedida" in cont["motivo"] and "5 dias úteis" in cont["motivo"]
+    assert "trava de 2 horas" in cont["motivo"] and "5 dias úteis" in cont["motivo"]
     assert "OPERACAO_POSSIVEL_DUPLICIDADE" not in por_tipo  # repetida não reaparece como duplicidade
     assert [o.ref for o in r["comissoes"][0]["origens"]] == ["PC-1", "PC-3"]
     assert r["divergencias"] == []

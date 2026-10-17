@@ -29,13 +29,20 @@ def _discriminacao(modelo: str | None, chave: str, competencia: str, n: int) -> 
     return texto
 
 
+def _fmt(valor: Decimal) -> str:
+    inteiro, _, frac = f"{normalize.q2(valor):.2f}".partition(".")
+    sinal = "-" if inteiro.startswith("-") else ""
+    return f"{sinal}{int(inteiro.lstrip('-')):,}".replace(",", ".") + f",{frac}"
+
+
 def _nao_emitida(cnpj: str, nome: str, linha: str, valor: Decimal, origens: list[Origem]) -> PendenciaCalculada:
     return {
         "tipo": "NF_NAO_EMITIDA",
         "ref_origem": cnpj,
         "valor_brl": valor,
-        "motivo": (f"Comissão de {linha} de {nome} (CNPJ {cnpj}) com saldo não positivo no mês "
-                   f"(R$ {normalize.q2(valor)}); a nota não é emitida. Valor da pendência = saldo da comissão."),
+        "motivo": (f"A comissão de {linha.lower()} de {nome} (CNPJ {cnpj}) fechou o mês em R$ {_fmt(valor)}: "
+                   "os estornos e reversões superaram as vendas. Nota com saldo zero ou negativo não é emitida. "
+                   "O valor mostrado é o saldo da comissão."),
         "quem_decide": "Financeiro",
         "origens": list(origens),
     }

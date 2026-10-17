@@ -1,7 +1,7 @@
 # Plano de implementação — Case Tarvo (fechamento set/2026)
 
 Time de **2 pessoas (A e B)** · janela 9h–18h30 · ≈ 6–7h de trabalho efetivo por pessoa (dev + pitch).
-Princípio: **regra determinística primeiro, IA só onde há texto livre, pessoa onde há decisão.** Todo número sai com rastro.
+Princípio: **regra determinística primeiro, pessoa onde há decisão.** Todo número sai com rastro.
 Organização: o trabalho é fatiado pelos **níveis de entrega do enunciado (Mínimo → Alvo → Extra)**. Cada nível tem escopo, critérios de aceite, definição de pronto e um **gate** de go/no-go (seção 6). Não se começa o nível seguinte com o anterior vermelho.
 
 ---
@@ -39,7 +39,6 @@ entrada/ (arquivos como vêm)          config/                     saida/
                                    ┌──────────────┐                  ▲
                                    │ BACK         │  core/saida.py ──┘ (escreve saída + rastro
                                    │ regras/*     │  e valida soma = total)
-                                   │ ia/llm.py    │◄─ [EXTRA] fallback de classificação bancária
                                    └──────┬───────┘
                                           ▼
                                    ┌──────────────┐
@@ -71,24 +70,14 @@ Python puro, determinístico, testável. Cada função devolve linhas de saída 
 - `checkout.py` — comissão e divergência por transação (seção 4).
 - `remessa.py` — dedupe, spread, comissão 50%, divergência.
 - `notas.py` — agrega comissões em NFs.
-- `classificacao.py` — regex → conta (REGRA, confiança 1.0); sem match → pendência `HUMANO` (no Extra, antes disso passa por `ia/llm.py`).
+- `classificacao.py` — regex → conta (REGRA, confiança 1.0); sem match → pendência `HUMANO`.
 - `pendencias.py` — coleta exceções levantadas por todos os módulos (tipo, ref, valor, motivo, quem_decide).
 - `core/saida.py` — **contrato comum**: `emitir(arquivo, linha, origens=[(arquivo, ref, valor)])`. Gera `id_saida`, escreve CSV no formato exigido e `rastro.csv`, e **falha se a soma do rastro ≠ valor reportado**.
 - `main.py` — CLI: `python -m src.main --entrada context/tarvo_data_pack --competencia 2026-09 --saida saida/`. Outubro = mesmo comando com outra pasta.
 
 
 
-### IA (`src/ia/llm.py`, nível Extra) — onde atua e onde não atua
-
-
-| Atua                                                                                                                                            | Não atua                                                         |
-| ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Classificar lançamento bancário que nenhuma regra pegou (Claude API, saída JSON com `conta_codigo` restrita às contas analíticas + `confianca`) | Calcular comissão, taxa, spread, NF (aritmética é regra)         |
-| Sugerir correspondência de nome → lojista **como pendência**, nunca aplicada sozinha                                                            | Decidir regra de negócio sem pergunta ao financeiro              |
-|                                                                                                                                                 | Aceitar sugestão com `confianca < 0.8` → vira pendência `HUMANO` |
-
-
-Nos níveis Mínimo e Alvo **nenhuma chamada de API é necessária**: o que a regra não pega vira pendência. A solução tem que rodar sem `ANTHROPIC_API_KEY`.
+Nenhum nível usa LLM em tempo de execução: o que a regra não pega vira pendência `HUMANO`, e a solução roda sem chave de API.
 
 ### Camada de front (`app.py`, Streamlit, nível Extra)
 
@@ -171,7 +160,7 @@ Alvo: tudo por regra. Ordem das regras importa: **padrão específico antes do g
 | `DARF 8109 PIS` / `2172 COFINS` / `0561 IRRF` / `ISS`                                                                                 | 2.1.03.001 / .002 / .004 / .003                                       |
 | `PAGTO SALARIOS` / `GPS INSS` / `GRF FGTS`                                                                                            | 2.1.04.001 / .002 / .003 **[ASSUMIDO: baixa de provisão de 08/2026]** |
 | `PIX RECEBIDO <CNPJ desconhecido>` (R$ 7.350, 16/09)                                                                                  | 1.1.09.002 + pendência                                                |
-| Resto                                                                                                                                 | Alvo: pendência `HUMANO` · Extra: LLM → se confiança < 0.8, pendência |
+| Resto                                                                                                                                 | pendência `HUMANO` |
 
 
 Conferência: as contagens por padrão devem bater com `DICIONARIO_DADOS.md` §5 (Aurora 84, Meridiano 100).
@@ -240,7 +229,7 @@ Prefixar com o nome do time. Registrar pergunta, horário e resposta em `HIPOTES
 | Pessoa                               | Dono de                                                                                                                                               | Dono da comunicação                                                          |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | **A — Checkout & Fiscal**            | `ingest/orbe`, `ingest/taxas`, cadastro mestre, `regras/checkout`, `regras/notas`, `core/normalize`                                                   | Checkpoint 1, README, números do pitch                                       |
-| **B — Remessa, Bancos & Plataforma** | `core/saida` + testes, `main.py`, `regras/pendencias`, `ingest/ponte`, `regras/remessa`, `ingest/bancos` + `regras/classificacao`, Extra (LLM, front) | Perguntas ao financeiro, `HIPOTESES.md`, Checkpoint 2, slides, `MOMENTOS.md` |
+| **B — Remessa, Bancos & Plataforma** | `core/saida` + testes, `main.py`, `regras/pendencias`, `ingest/ponte`, `regras/remessa`, `ingest/bancos` + `regras/classificacao`, Extra (front) | Perguntas ao financeiro, `HIPOTESES.md`, Checkpoint 2, slides, `MOMENTOS.md` |
 
 
 Regras de colaboração:
@@ -397,8 +386,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 | E1  | Rastro completo e conferência automática | É o critério de avaliação do enunciado para "Extra"       |
 | E2  | Pendências explicadas                    | Idem; é o que o CFO lê                                    |
 | E3  | Roda em outubro sem retrabalho           | Idem; é a resposta à pergunta "como a analista usa"       |
-| E4  | Fallback de IA na classificação bancária | Dá o "onde a IA atua" ao pitch                            |
-| E5  | Front Streamlit fino                     | Conveniência; **primeiro a ser cortado** (não é avaliado) |
+| E4  | Front Streamlit fino                     | Conveniência; **primeiro a ser cortado** (não é avaliado) |
 
 
 **Critérios de aceite**
@@ -406,8 +394,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 - [ ] **E1.** *Rastro completo:* `DIV`, `LAN` e `PEN` têm rastro 1:1 com a linha de origem; `NF` e `COM` apontam para todas as transações/operações; a execução imprime um relatório de conferência (Σ por arquivo × Σ rastro × totais de origem) e **falha o comando** se algo não fechar.
 - [ ] **E2.** *Pendências explicadas:* `motivo` em linguagem de negócio (frase que o financeiro entende, sem jargão de código); `quem_decide` de uma lista fechada (Financeiro, Comercial, Ponte, Contador…); coluna extra `sugestao` com o próximo passo; cobre no mínimo os casos de `DICIONARIO_DADOS.md` §6 (Atlas, Horizonte/Kiwi, repetida e negativos da Ponte, PIX sem identificação, TED de R$ 300 mil sem contrapartida).
 - [ ] **E3.** *Outubro sem retrabalho:* (a) `--entrada` e `--competencia` são parâmetros e nenhuma data/EC/CNPJ está no código (verificação por `grep`); (b) toda regra mutável está em `config/regras.yaml` / `lojistas.yaml`; (c) o cabeçalho de cada arquivo é localizado pelo conteúdo; (d) um teste roda o pipeline numa cópia do data pack com um lojista removido e uma data deslocada, sem alterar código; (e) o `README.md` leva um clone limpo a gerar `saida/` em < 5 comandos; (f) lojista novo sem cadastro vira pendência, nunca erro.
-- [ ] **E4.** *IA fallback:* `llm.py` devolve JSON `{conta_codigo, confianca}` com `conta_codigo` restrita às analíticas; `confianca < 0.8` vira pendência `HUMANO`; sem `ANTHROPIC_API_KEY` o pipeline continua e as linhas viram pendência; toda chamada é registrada (entrada, saída) e as correções ficam para `MOMENTOS`; só roda sobre linhas que nenhuma regra pegou (nunca sobre as 184 já classificadas por regra, para não mudar número do Alvo).
-- [ ] **E5.** *Front:* roda, mostra as saídas, `id_saida` → linhas do rastro, fila de pendências; **nenhuma regra de negócio** em `app.py`.
+- [ ] **E4.** *Front:* roda, mostra as saídas, `id_saida` → linhas do rastro, fila de pendências; **nenhuma regra de negócio** em `app.py`.
 
 **Definição de pronto (Extra)**
 
@@ -429,7 +416,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 | `HIPOTESES.md`               | B (cada um registra na hora)             | Toda premissa com **[SABEMOS]/[ASSUMIDO]**; perguntas com horário e resposta; premissas sem resposta explícitas           |
 | `PROMPTS/A/`, `PROMPTS/B/`   | cada um                                  | Transcript exportado sem edição (só chaves removidas)                                                                     |
 | `PROMPTS/MOMENTOS.md`        | B (com A)                                | 2–4 momentos; ≥ 1 em que a IA errou; cada um com: o que pedimos, o que voltou, o que fizemos                              |
-| `README.md`                  | A                                        | Instalar do zero, `ANTHROPIC_API_KEY` (opcional), como rodar a competência, limitações conhecidas; testado em clone limpo |
+| `README.md`                  | A                                        | Instalar do zero, como rodar a competência, limitações conhecidas; testado em clone limpo |
 | Pitch (7 itens do enunciado) | A (itens 1, 3, 4) e B (itens 2, 5, 6, 7) | Linguagem do CFO; números vêm de `saida/`; enviado em #hackathon-entregas até as 19h                                      |
 | Checkpoints 1 e 2            | A e B                                    | Postados no thread do time antes de 11h e 15h30                                                                           |
 
@@ -448,7 +435,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 | 12h30–13h15 | Pausa                        |                                                                        |                                               |                                            |
 | 13h15–15h00 | **2 · Alvo**                 | checkout completo, divergências, NFs                                   | remessa, divergências, bancos                 | CP2 postado até 15h15                      |
 | 15h00–15h30 | **3 · Validação cruzada**    | revisa B                                                               | revisa A                                      | **Gate A 15h30**, tag `alvo`               |
-| 15h30–16h30 | **4 · Extra + docs**         | README, `HIPOTESES`, totais do pitch                                   | E1 → E5                                       | **Gate E 16h30** (corte duro), tag `extra` |
+| 15h30–16h30 | **4 · Extra + docs**         | README, `HIPOTESES`, totais do pitch                                   | E1 → E4                                       | **Gate E 16h30** (corte duro), tag `extra` |
 | 16h30–17h30 | **5 · Pitch e congelamento** | slides (itens 1, 3, 4)                                                 | slides (itens 2, 5, 6, 7), `MOMENTOS`         | exportar transcripts                       |
 | 17h30–18h30 | Folga                        | clone limpo, `saida/` final, commit, push, link em #hackathon-entregas | dado novo / respostas tardias                 | **Entrega 18h30**; pitch até 19h           |
 
@@ -467,7 +454,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 | Duas pessoas, sem sobra: um travamento para metade do time                      | Regra dos 20 min; gate é trabalho conjunto                                                                                                |
 | Caminho crítico do Mínimo depende de `core/saida.py` (B) e de `checkout.py` (A) | Contrato definido na Fase 0; A desenvolve já contra a assinatura de `emitir()`; B entrega `saida` antes das 10h45                         |
 | A carga de B no Alvo (remessa + bancos) é maior                                 | `ingest/ponte` e `ingest/bancos` já adiantados na Fase 1; A termina o checkout e puxa `classificacao` se B estiver atrasado às 14h15      |
-| Cortar escopo sem perder pontos                                                 | Streamlit e LLM saem do Alvo (não pesam na correção dos números, que vale 25%); a IA continua evidenciada pelo histórico de prompts (20%) |
+| Cortar escopo sem perder pontos                                                 | Streamlit sai do Alvo (não pesa na correção dos números, que vale 25%); a IA continua evidenciada pelo histórico de prompts (20%) |
 | Extra consumir o tempo de docs/pitch                                            | Docs e pitch rodam em paralelo ao Extra com dono definido; corte duro às 16h30                                                            |
 
 
@@ -496,15 +483,14 @@ src/      main.py  app.py [Extra]
           core/   normalize.py  saida.py
           ingest/ orbe.py taxas.py ponte.py bancos.py plano.py
           regras/ checkout.py remessa.py notas.py classificacao.py pendencias.py
-          ia/     llm.py [Extra]
 tests/    test_normalize.py  test_saida.py  test_checkout.py
           test_remessa.py  test_lancamentos.py  test_formato.py
 saida/    (6 CSVs gerados)
 context/  tarvo_data_pack/ (entrada, intocada)
 ```
 
-Stack: Python 3.11, pandas, openpyxl, pytest · Extra: anthropic, streamlit.
+Stack: Python 3.11, pandas, openpyxl, pytest · Extra: streamlit.
 
 ## 9. Fora do escopo (declarar no Checkpoint 1)
 
-Conciliação TED Orbe × líquido das transações, emissão real de NF, integração com o ERP Fênix, login/multiusuário, multi-competência, visual caprichado. Streamlit e fallback de IA só entram se o Gate A fechar no horário.
+Conciliação TED Orbe × líquido das transações, emissão real de NF, integração com o ERP Fênix, login/multiusuário, multi-competência, visual caprichado. Streamlit só entra se o Gate A fechar no horário.

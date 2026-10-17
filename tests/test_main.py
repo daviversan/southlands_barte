@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from src import main
-from src.core.saida import BANCOS, ESQUEMAS, LINHAS_NEGOCIO, METODOS, Origem, Saida, SaidaError, conferir_diretorio
+from src.core.saida import (BANCOS, ESQUEMAS, LINHAS_NEGOCIO, METODOS, QUEM_DECIDE, Origem, Saida, SaidaError,
+                            conferir_diretorio)
 
 PACK = Path(__file__).resolve().parent.parent / "context" / "tarvo_data_pack"
 RAIZ = PACK.parent.parent
@@ -66,7 +67,7 @@ def test_seis_csvs_formato_e_enums(publicada):
     for r in ler(destino, "lancamentos_classificados"):
         assert r["banco"] in BANCOS and r["metodo"] in METODOS
     for r in ler(destino, "pendencias"):
-        assert r["tipo"].strip() and r["motivo"].strip() and r["quem_decide"] in ("Financeiro", "Comercial")
+        assert r["tipo"].strip() and r["motivo"].strip() and r["sugestao"].strip() and r["quem_decide"] in QUEM_DECIDE
 
 
 def test_numeros_de_referencia_do_data_pack(publicada):

@@ -123,9 +123,10 @@ def calcular_remessa(
             ref = ref_ocorrencia(num, k)
             pendencias.append(_pendencia(
                 "OPERACAO_REPETIDA", ref, spread,
-                f"Nº Operação {num} aparece {k} vezes no relatório (linha {op['linha']} é a ocorrência {k}). "
-                "O número é único: a operação conta uma vez na comissão e esta linha entra na lista de correção "
-                f"a pedir para a Ponte. Valor da pendência = Spread R$ da linha excedente (R$ {_fmt(spread)}).",
+                f"A operação {num} aparece {k} vezes no relatório da Ponte (a repetição está na linha {op['linha']}"
+                + (f", marcada \"{op['observacao']}\"" if op["observacao"] else "") + "). O número da operação é "
+                "único, então ela foi contada uma vez só na comissão; a linha a mais precisa sair do relatório. "
+                f"O valor mostrado é o spread da linha repetida (R$ {_fmt(spread)}).",
                 arquivo))
             parcelas["repetidas"].append((ref, spread))
             continue
@@ -134,9 +135,9 @@ def calcular_remessa(
         if chave in chaves_vistas:
             pendencias.append(_pendencia(
                 "OPERACAO_POSSIVEL_DUPLICIDADE", num, Decimal("0"),
-                f"{num} tem o mesmo CNPJ, valor ({op['moeda']} {op['valor_me']}) e data de {chaves_vistas[chave]}, "
-                "com Nº Operação diferente. Só sinalização: a operação continua na comissão até alguém confirmar "
-                "com a Ponte. Valor zero (não retira nada do fechamento).",
+                f"A operação {num} tem o mesmo cliente, valor ({op['moeda']} {op['valor_me']}) e data da "
+                f"{chaves_vistas[chave]}, com número diferente; pode ser a mesma remessa lançada duas vezes. "
+                "Por enquanto ela continua na comissão: é só um alerta, sem valor retirado do fechamento.",
                 arquivo))
         else:
             chaves_vistas[chave] = num
@@ -144,25 +145,27 @@ def calcular_remessa(
         if op["cnpj"] not in por_cnpj:
             pendencias.append(_pendencia(
                 "CADASTRO_NAO_RESOLVIDO", num, spread,
-                f"CNPJ {op['cnpj']} ({op['cliente_origem']}) da operação {num} não consta na planilha de taxas; "
-                f"a operação não entrou na comissão. Valor da pendência = Spread R$ (R$ {_fmt(spread)}).",
+                f"O cliente da operação {num} ({op['cliente_origem']}, CNPJ {op['cnpj']}) não está na planilha de "
+                "taxas, então não sabemos se é lojista da Tarvo; a operação ficou fora da comissão. "
+                f"O valor mostrado é o spread da operação (R$ {_fmt(spread)}).",
                 arquivo))
             parcelas["cadastro"].append((num, spread))
             continue
         if spread < 0:
             pendencias.append(_pendencia(
                 "CONTESTACAO", num, spread,
-                f"Spread negativo na operação {num} (R$ {_fmt(spread)}): trava de 2 horas excedida. Fora da comissão, "
-                "da nota e das divergências; contestar com a Ponte dentro do prazo de 5 dias úteis do e-mail. "
-                "Valor da pendência = Spread R$ informado.",
+                f"A operação {num} teve spread negativo (R$ {_fmt(spread)}): o câmbio foi fechado depois da trava de "
+                "2 horas do contrato, e a perda não pode ser repassada à Tarvo. Ficou fora da comissão, da nota e das "
+                "divergências; a contestação com a Ponte tem prazo de 5 dias úteis do e-mail do relatório. "
+                "O valor mostrado é o spread informado pela Ponte.",
                 arquivo))
             parcelas["negativos"].append((num, spread))
             continue
         if op["status_compliance"].upper() == STATUS_RESSALVA and not ressalva_entra:
             pendencias.append(_pendencia(
                 "OPERACAO_COM_RESSALVA", num, spread,
-                f"Operação {num} com status {STATUS_RESSALVA}; a configuração manda não comissionar até confirmar. "
-                f"Valor da pendência = Spread R$ (R$ {_fmt(spread)}).",
+                f"A operação {num} foi aprovada com ressalva pelo compliance da Ponte e, pela regra em vigor, só é "
+                f"comissionada depois de confirmada. O valor mostrado é o spread da operação (R$ {_fmt(spread)}).",
                 arquivo))
             parcelas["ressalva"].append((num, spread))
             continue
@@ -210,8 +213,9 @@ def calcular_remessa(
     if dif_rodape != 0 or rodape["total_operacoes"] != len(operacoes):
         pendencias.append(_pendencia(
             "RODAPE_DIVERGENTE", "Operações!rodape", dif_rodape,
-            f"Rodapé da Ponte informa {rodape['total_operacoes']} operações e R$ {_fmt(rodape['spread_total_brl'])}; "
-            f"as linhas somam {len(operacoes)} e R$ {_fmt(soma_linhas)}. Valor da pendência = soma das linhas − rodapé.",
+            f"O total do relatório da Ponte informa {rodape['total_operacoes']} operações e "
+            f"R$ {_fmt(rodape['spread_total_brl'])} de spread, mas as linhas somam {len(operacoes)} operações e "
+            f"R$ {_fmt(soma_linhas)}. O valor mostrado é a diferença (linhas menos total informado).",
             arquivo))
 
     def total(nome):

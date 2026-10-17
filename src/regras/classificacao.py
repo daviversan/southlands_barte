@@ -40,6 +40,14 @@ def normalizar_descricao(texto: str) -> str:
     return re.sub(r"\s+", " ", t).strip().upper()
 
 
+def _data_br(iso: str) -> str:
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}"
+
+
+def _banco(nome: str) -> str:
+    return nome.capitalize()
+
+
 def _fmt(valor: Decimal) -> str:
     inteiro, _, frac = f"{valor:.2f}".partition(".")
     sinal = "-" if inteiro.startswith("-") else ""
@@ -124,21 +132,23 @@ def classificar_lancamentos(
             if regra["pendencia"] == "CREDITO_NAO_IDENTIFICADO":
                 pendencias.append(_pendencia(
                     "CREDITO_NAO_IDENTIFICADO", l,
-                    f"Crédito de R$ {_fmt(l['valor'])} em {l['data']} ({l['banco']}) sem identificação do pagador: "
-                    f"\"{l['descricao']}\". Classificado em {regra['conta']} (créditos não identificados) até alguém "
-                    "identificar a origem. Valor da pendência = valor do lançamento."))
+                    f"Entraram R$ {_fmt(l['valor'])} em {_data_br(l['data'])} no {_banco(l['banco'])} sem identificação "
+                    f"de quem pagou (\"{l['descricao']}\"). Não sabemos quem pagou nem por quê; o valor foi lançado "
+                    f"provisoriamente em créditos não identificados ({regra['conta']})."))
             continue
-        motivo = (f"Lançamento \"{l['descricao']}\" de R$ {_fmt(l['valor'])} em {l['data']} ({l['banco']}) ")
+        motivo = (f"O lançamento \"{l['descricao']}\" de R$ {_fmt(l['valor'])} em {_data_br(l['data'])} no "
+                  f"{_banco(l['banco'])} ")
         if regra is None:
-            motivo += "não casou com nenhuma regra de classificação; uma pessoa precisa escolher a conta."
+            motivo += "não se encaixa em nenhum padrão conhecido de extrato; falta escolher a conta contábil."
         else:
-            motivo += (f"casou com a regra {regra['id']}, mas no modo "
-                       f"{cfg.get('folha_e_impostos_de_08', 'baixa_provisao')} o plano não tem conta para ele.")
+            motivo += ("é folha ou imposto de agosto e, no tratamento escolhido para esses pagamentos "
+                       f"({cfg.get('folha_e_impostos_de_08', 'baixa_provisao').replace('_', ' ')}), "
+                       "o plano de contas não tem conta para ele.")
         classificados.append({
             **l, "conta_codigo": "", "metodo": "HUMANO", "confianca": Decimal(0), "regra_id": None,
             "origens": [Origem(l["arquivo_origem"], l["ref_origem"], l["valor"])],
         })
-        pendencias.append(_pendencia("LANCAMENTO_NAO_CLASSIFICADO", l, motivo + " Valor da pendência = valor do lançamento."))
+        pendencias.append(_pendencia("LANCAMENTO_NAO_CLASSIFICADO", l, motivo))
 
     pendencias += _contrapartidas(lancamentos, regra_de, lista, janela)
     humano = sum(1 for c in classificados if c["metodo"] == "HUMANO")
@@ -176,8 +186,8 @@ def _contrapartidas(lancamentos, regra_de, lista, janela) -> list[PendenciaCalcu
                 continue
             pendencias.append(_pendencia(
                 "TRANSFERENCIA_SEM_CONTRAPARTIDA", s,
-                f"Transferência entre contas próprias de R$ {_fmt(s['valor'])} em {s['data']} ({s['banco']}) sem "
-                f"entrada de mesmo valor no outro banco em até {janela} dia(s). O lançamento segue classificado "
-                "por regra; falta confirmar se é só diferença de data de fim de mês. "
-                "Valor da pendência = valor do lançamento."))
+                f"Saíram R$ {_fmt(abs(s['valor']))} do {_banco(s['banco'])} em {_data_br(s['data'])} como transferência "
+                f"entre contas da Tarvo, mas a entrada do mesmo valor não aparece no outro banco em até {janela} "
+                "dia(s). Pode ser só a virada do mês (a entrada cairia no extrato seguinte). O lançamento continua "
+                "classificado normalmente."))
     return pendencias

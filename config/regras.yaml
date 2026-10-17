@@ -16,15 +16,27 @@ checkout:
   nf_saldo_nao_positivo: pendencia  # CONFIRMADO: não emite nota, vira pendência (Financeiro)
   # Roteamento de venda cujo EC não está no cadastro (nível Mínimo). EC fora desta lista cai em
   # CADASTRO_NAO_RESOLVIDO / Financeiro. Nunca resolve identidade por nome; só decide quem responde.
+  # `sugestao` (opcional) substitui a sugestão genérica do tipo em `pendencias.tipos`.
+  # Uma rota só explica e encaminha: nunca liga o EC a um lojista (isso só no cadastro, com confirmação).
   ec_sem_cadastro:
     "1076801732":                   # Atlas Idiomas: só existe na aba "ANTIGO 2025" (P8, PARCIAL)
       tipo: CONTRATO_AUSENTE
       quem_decide: Comercial        # CONFIRMADO: Comercial decide; Atlas não é faturada até confirmar a taxa
-      motivo: sem contrato na aba vigente da planilha; a taxa é decidida pelo Comercial e a venda não é comissionada até lá.
+      motivo: a Atlas só tem contrato na tabela antiga de 2025, sem taxa vigente para o mês; por orientação do financeiro, ela não é faturada até o Comercial confirmar a taxa.
+      sugestao: Comercial confirma a taxa da Atlas e a inclui na aba "Taxas vigentes" da planilha; depois, rodar o fechamento de novo.
     "1043300981":                   # Horizonte Intercâmbio: Horizonte Viagens ou Novo Horizonte? (P7, ABERTA)
       tipo: CONTRATO_AMBIGUO
       quem_decide: Comercial        # ASSUMIDO: segue a tabela de tipos do contrato técnico
-      motivo: pode ser Horizonte Viagens ou Novo Horizonte (ambos sem EC na planilha); não adivinhar, uma pessoa precisa confirmar.
+      motivo: o nome pode ser da Horizonte Viagens ou da Novo Horizonte, e nenhuma das duas tem EC na planilha; não vamos adivinhar.
+      sugestao: Comercial confirma de qual lojista é o EC 1043300981; registrar o EC no cadastro de lojistas (config/lojistas.yaml) e rodar o fechamento de novo.
+    "1038867654":                   # Kiwi: a planilha diz "EC pendente" (P7, ABERTA)
+      tipo: CADASTRO_NAO_RESOLVIDO
+      motivo: a planilha tem a Kiwi Experience com "EC pendente" e este EC não está no cadastro. O nome sugere a Kiwi, mas o vínculo só é feito com confirmação.
+      sugestao: Confirmar com o Comercial que o EC 1038867654 é da Kiwi Experience; registrar no cadastro de lojistas (config/lojistas.yaml) e rodar o fechamento de novo.
+    "1043396662":                   # Horizonte Viagens: tem EC na Orbe, mas a planilha deixa o EC vazio
+      tipo: CADASTRO_NAO_RESOLVIDO
+      motivo: a planilha tem a Horizonte Viagens sem EC e este EC não está no cadastro. O nome sugere a Horizonte Viagens, mas o vínculo só é feito com confirmação.
+      sugestao: Confirmar com o Comercial que o EC 1043396662 é da Horizonte Viagens; registrar no cadastro de lojistas (config/lojistas.yaml) e rodar o fechamento de novo.
 
 notas:
   # {competencia} = AAAA-MM; {n_transacoes} = nº de linhas de origem da nota
@@ -47,7 +59,6 @@ bancos:
   folha_e_impostos_de_08: baixa_provisao   # ASSUMIDO (P12): baixa_provisao | despesa
   aurora_ref_offset: 0                     # 0 = L9 (linha física, padrão); 1 = convenção L10 do enunciado (pergunta aberta)
   janela_contrapartida_dias: 3             # DECIDIDO (H3): transferência entre contas casa em até N dias
-  confianca_minima_ia: 0.8                 # Extra: abaixo disso vira pendência HUMANO
   # Lista ORDENADA: a primeira regra que casa vence. Padrão sobre a descrição sem acento, em maiúsculas.
   # conta_por_modo: escolhido por folha_e_impostos_de_08; null = o plano não tem conta (vira pendência).
   regras:
@@ -83,3 +94,47 @@ bancos:
     - {id: iof, banco: MERIDIANO, padrao: '^IOF S/ OPERACAO CREDITO', conta: "4.3.01"}
     - {id: seguro, banco: MERIDIANO, padrao: '^SEGURO EMPRESARIAL', conta: "4.2.05"}
     - {id: tarifa_meridiano, banco: MERIDIANO, padrao: '^TARIFA ', conta: "4.2.01"}
+
+# Pendências explicadas (nível Extra, E2). Toda pendência publicada tem um próximo passo.
+# quem_decide (opcional) prevalece sobre o padrão do módulo; lista fechada: Financeiro, Comercial,
+# Ponte, Contador. Tipo novo sem entrada aqui encerra a execução com erro de configuração.
+pendencias:
+  tipos:
+    CADASTRO_NAO_RESOLVIDO:
+      sugestao: Confirmar a quem pertence o EC (ou o CNPJ) e registrar no cadastro de lojistas (config/lojistas.yaml) ou na planilha; depois, rodar o fechamento de novo.
+    CONTRATO_AUSENTE:
+      sugestao: Comercial informa a taxa contratada e a inclui na aba "Taxas vigentes"; depois, rodar o fechamento de novo.
+    CONTRATO_AMBIGUO:
+      sugestao: Comercial indica qual contrato vale e corrige a planilha ou o cadastro; depois, rodar o fechamento de novo.
+    CONTRATO_INATIVO:
+      sugestao: Comercial confirma se o lojista ainda opera; se sim, reativar o contrato na planilha e rodar o fechamento de novo.
+    VIGENCIA_SEM_COBERTURA:
+      sugestao: Comercial informa a taxa que valia na data e ajusta a vigência na planilha; depois, rodar o fechamento de novo.
+    TAXA_AUSENTE:
+      sugestao: Comercial informa a taxa dessa faixa para o lojista e a inclui na planilha; depois, rodar o fechamento de novo.
+    VENDA_INVALIDA:
+      sugestao: Financeiro pede à Orbe a correção da transação; se ela vier corrigida em arquivo de ajuste, rodar o fechamento de novo.
+    LANCAMENTO_INVALIDO:
+      sugestao: Financeiro pede à Orbe a correção do lançamento; se ele vier corrigido em arquivo de ajuste, rodar o fechamento de novo.
+    NF_NAO_EMITIDA:
+      sugestao: Financeiro decide se o saldo negativo é compensado na comissão do mês seguinte ou cobrado do lojista.
+    CONTESTACAO:
+      sugestao: Financeiro abre a contestação com a Ponte dentro de 5 dias úteis do e-mail do relatório, citando o número da operação.
+    OPERACAO_REPETIDA:
+      quem_decide: Ponte            # DECIDIDO: a regra (conta 1x) é CONFIRMADA; falta só a Ponte corrigir o relatório
+      sugestao: Financeiro envia à Ponte a lista de correção pedindo o relatório sem a linha repetida; a comissão já conta a operação uma vez.
+    OPERACAO_POSSIVEL_DUPLICIDADE:
+      quem_decide: Ponte            # ASSUMIDO: só a Ponte sabe se são duas remessas
+      sugestao: Perguntar à Ponte se são duas remessas diferentes; se for duplicidade, pedir o relatório corrigido.
+    OPERACAO_COM_RESSALVA:
+      sugestao: Financeiro confirma com a Ponte se a operação com ressalva foi liquidada; se sim, liberar na configuração e rodar o fechamento de novo.
+    RODAPE_DIVERGENTE:
+      quem_decide: Ponte
+      sugestao: Pedir à Ponte o relatório com o total conferido; a comissão usa as linhas, não o total informado.
+    LANCAMENTO_NAO_CLASSIFICADO:
+      quem_decide: Contador         # DECIDIDO: escolher conta contábil é decisão do contador
+      sugestao: Contador indica a conta; se o lançamento se repetir todo mês, incluir o padrão em bancos.regras (config/regras.yaml).
+    CREDITO_NAO_IDENTIFICADO:
+      sugestao: Financeiro identifica o pagador pelo CNPJ do Pix e pelo banco; se não for dinheiro da Tarvo, devolver o Pix e baixar a conta 1.1.09.002.
+    TRANSFERENCIA_SEM_CONTRAPARTIDA:
+      sugestao: Financeiro confere no extrato do mês seguinte a entrada do mesmo valor no outro banco; se não aparecer, acionar o banco.

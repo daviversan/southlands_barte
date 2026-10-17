@@ -27,6 +27,8 @@ from src.core.normalize import q2
 LINHAS_NEGOCIO = ("CHECKOUT", "REMESSA")
 BANCOS = ("AURORA", "MERIDIANO")
 METODOS = ("REGRA", "IA", "HUMANO")
+# Lista fechada de quem resolve uma pendência (PLANO E2). Ponte = a correção depende do parceiro.
+QUEM_DECIDE = ("Financeiro", "Comercial", "Ponte", "Contador")
 
 
 class SaidaError(ValueError):
@@ -84,7 +86,8 @@ ESQUEMAS: dict[str, Esquema] = {
     ),
     "pendencias": Esquema(
         "PEN", ("id_saida", "tipo", "ref_origem", "valor_brl", "motivo", "quem_decide"),
-        extras=("sugestao",), valor="valor_brl", textos=("tipo", "motivo", "quem_decide"),
+        extras=("sugestao",), valor="valor_brl", textos=("tipo", "motivo", "quem_decide", "sugestao"),
+        enums=(("quem_decide", QUEM_DECIDE),),
     ),
     # O rastro é escrito por `emitir`; não se emite linha de rastro diretamente.
     "rastro": Esquema("", ("id_saida", "arquivo_origem", "ref_origem", "valor")),
