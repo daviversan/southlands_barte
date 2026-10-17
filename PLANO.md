@@ -414,7 +414,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 | Entregável                   | Dono                                     | Pronto quando                                                                                                             |
 | ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `HIPOTESES.md`               | B (cada um registra na hora)             | Toda premissa com **[SABEMOS]/[ASSUMIDO]**; perguntas com horário e resposta; premissas sem resposta explícitas           |
-| `PROMPTS/A/`, `PROMPTS/B/`   | cada um                                  | Transcript exportado sem edição (só chaves removidas)                                                                     |
+| `PROMPTS/Davi Versan/`, `PROMPTS/Igor Passo/`   | cada um                                  | Transcript exportado sem edição (só chaves removidas)                                                                     |
 | `PROMPTS/MOMENTOS.md`        | B (com A)                                | 2–4 momentos; ≥ 1 em que a IA errou; cada um com: o que pedimos, o que voltou, o que fizemos                              |
 | `README.md`                  | A                                        | Instalar do zero, como rodar a competência, limitações conhecidas; testado em clone limpo |
 | Pitch (7 itens do enunciado) | A (itens 1, 3, 4) e B (itens 2, 5, 6, 7) | Linguagem do CFO; números vêm de `saida/`; enviado em #hackathon-entregas até as 19h                                      |
@@ -477,7 +477,7 @@ Executa **B**, enquanto **A** faz a documentação (6.7). Ordem de prioridade (p
 
 ```
 README.md  HIPOTESES.md  PLANO.md  DICIONARIO_DADOS.md
-PROMPTS/  (A/, B/, MOMENTOS.md)
+PROMPTS/  (Davi Versan/, Igor Passo/, MOMENTOS.md)
 config/   regras.yaml  lojistas.yaml
 src/      main.py  app.py [Extra]
           core/   normalize.py  saida.py

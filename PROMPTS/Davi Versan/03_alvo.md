@@ -2,7 +2,7 @@
 
 Pessoa A · 2 sessões · 14:37–15:59 · `PLANO.md` §6.5 e `CONTRATO_TECNICO_ALVO.md`.
 
-B implementou o seu lado do Alvo em outra máquina (commits `ea48b0f` e `559c6af`; ver `../B/`).
+B implementou o seu lado do Alvo em outra máquina (commits `ea48b0f` e `559c6af`; ver `../Igor Passo/`).
 
 ---
 
