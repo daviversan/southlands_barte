@@ -15,6 +15,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 import shutil
+from fnmatch import fnmatchcase
 from uuid import uuid4
 
 import yaml
@@ -63,6 +64,38 @@ ARQUIVOS = {
     "meridiano": "05b_*.ofx",
 }
 
+PARTES_ANALISE = {
+    'taxas': ('planilha de taxas contratadas', 'calcular as comissões de checkout e comparar as taxas e os spreads contratados com os aplicados'),
+    'ponte': ('e-mail da Ponte com o relatório de operações anexado', 'calcular as comissões e divergências de remessa e a nota de remessa'),
+    'plano': ('plano de contas', 'classificar os lançamentos bancários nas contas contábeis corretas'),
+    'aurora': ('extrato do Aurora', 'classificar os lançamentos do Aurora e conferir as transferências entre os bancos'),
+    'meridiano': ('extrato do Meridiano', 'classificar os lançamentos do Meridiano e conferir as transferências entre os bancos'),
+}
+
+
+def validar_arquivos_entrada(nomes: list[str], exigir_orbe: bool = False) -> None:
+    """Informa todos os documentos ausentes/ambíguos e a análise afetada."""
+    erros = []
+    for papel, padrao in ARQUIVOS.items():
+        candidatos = [nome for nome in nomes if fnmatchcase(nome, padrao)]
+        documento, finalidade = PARTES_ANALISE[papel]
+        if not candidatos:
+            erros.append(f'Falta o seguinte documento: {documento} ({padrao}), necessário para {finalidade}. '
+                         f'Envie um arquivo com esse padrão de nome.')
+        elif len(candidatos) > 1:
+            erros.append(f'Foram encontrados {len(candidatos)} arquivos de {documento} ({padrao}): '
+                         f"{', '.join(candidatos)}. Mantenha apenas um para {finalidade}; remova as cópias ou versões extras.")
+    if exigir_orbe and not any(fnmatchcase(nome, '01_orbe_*.csv') for nome in nomes):
+        erros.append('Falta o relatório de transações da Orbe (01_orbe_*.csv), necessário para calcular '
+                     'as comissões, divergências e notas de checkout. Envie pelo menos um arquivo original; '
+                     'o arquivo de ajustes 06_orbe_ajustes_*.csv é opcional e não substitui o relatório principal.')
+    for nome, quantidade in Counter(n.casefold() for n in nomes).items():
+        if quantidade > 1:
+            erros.append(f'O arquivo {nome} foi enviado mais de uma vez. Remova a cópia e mantenha somente '
+                         'uma ocorrência para não contar os mesmos dados duas vezes na análise.')
+    if erros:
+        raise ValueError('\n\n'.join(erros))
+
 
 def _carregar_yaml(caminho: Path) -> dict:
     with caminho.open(encoding="utf-8") as arquivo:
@@ -79,11 +112,10 @@ def _validar_competencia(competencia: str) -> None:
 
 
 def _descobrir(entrada: Path) -> dict[str, Path]:
+    validar_arquivos_entrada([p.name for p in entrada.iterdir() if p.is_file()])
     achados = {}
     for papel, padrao in ARQUIVOS.items():
-        candidatos = sorted(entrada.glob(padrao))
-        if len(candidatos) != 1:
-            raise ValueError(f"Esperado exatamente um arquivo {padrao} na entrada (encontrados {len(candidatos)})")
+        candidatos = sorted(p for p in entrada.glob(padrao) if p.is_file())
         achados[papel] = candidatos[0]
     return achados
 

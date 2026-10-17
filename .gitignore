@@ -8,3 +8,4 @@ southlands_barte.code-workspace
 .DS_Store
 saida/*
 !saida/.gitkeep
+context/uploads/

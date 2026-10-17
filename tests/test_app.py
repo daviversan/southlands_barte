@@ -1,6 +1,7 @@
 """Front fino (E4): os auxiliares só leem a saída e nenhuma regra de negócio vive em app.py."""
 import ast
 import sys
+from io import BytesIO
 from datetime import date
 from pathlib import Path
 
@@ -67,6 +68,7 @@ class _StreamlitFalso:
 
     def __init__(self):
         self.session_state, self.chamadas = {}, []
+        self.documentos = []
 
     def _widget(self, nome):
         def chamar(*args, **kwargs):
@@ -77,6 +79,8 @@ class _StreamlitFalso:
                 return list(args[1])[0] if list(args[1]) else None
             if nome == "button":
                 return True
+            if nome == 'file_uploader':
+                return self.documentos
             if nome in ("tabs", "columns"):
                 n = args[0] if isinstance(args[0], int) else len(args[0])
                 return [self for _ in range(n)]
@@ -123,6 +127,97 @@ def test_render_percorre_todas_as_telas(tmp_path, monkeypatch):
     metricas = [c for c in falso.chamadas if c[0] == "metric"]
     assert all(len(args) == 2 and "delta" not in kw for _, args, kw in metricas)  # sem seta de variação
     rotulos = [c[1][0] for c in falso.chamadas if c[0] == "text_input"]
-    assert rotulos == ["Competência (AAAA-MM)"]  # sem campos de pasta
+    assert rotulos == ["mês analizado"]  # sem campos de pasta
     textos = " ".join(str(a) for c in falso.chamadas if c[0] == "markdown" for a in c[1])
     assert "\\$ 231.007,79" in textos and "R$ 231" not in textos.replace("R\\$", "")
+
+
+class Documento(BytesIO):
+    def __init__(self, nome, conteudo):
+        super().__init__(conteudo)
+        self.name = nome
+
+
+def documentos_pack():
+    return [Documento(p.name, p.read_bytes()) for p in sorted(PACK.iterdir())
+            if p.suffix.lower() in ('.csv', '.xlsx', '.eml', '.ofx')]
+
+
+@pytest.mark.skipif(not PACK.exists(), reason='data pack ausente')
+def test_upload_processa_arquivos_originais_e_preserva_rastro(tmp_path):
+    documentos = documentos_pack()
+    uploads, saida = tmp_path/'uploads', tmp_path/'saida'
+    ok, resumo, checagens = app.executar_documentos('2026-09', documentos, uploads, saida)
+    assert ok, resumo
+    assert all(c.ok for c in checagens if c.bloqueia)
+    lote, = uploads.iterdir()
+    assert {p.name:p.read_bytes() for p in lote.iterdir()} == {d.name:d.getvalue() for d in documentos}
+    resultados = app.ler_saida(saida)
+    assert len(resultados['notas_a_emitir']) == 19
+    assert len(resultados['lancamentos_classificados']) == 184
+    assert all((lote/r['arquivo_origem']).exists() for r in resultados['rastro'])
+
+
+@pytest.mark.parametrize('documentos', [[], [Documento('../fora.csv', b'x')],
+    [Documento('a.csv', b'a'), Documento('A.csv', b'b')], [Documento('arquivo.exe', b'x')]])
+def test_upload_rejeita_nomes_invalidos_e_duplicados(tmp_path, documentos):
+    with pytest.raises(ValueError):
+        app.salvar_documentos(documentos, tmp_path/'lote')
+    assert not (tmp_path/'lote').exists()
+
+
+def test_upload_incompleto_preserva_saida(tmp_path):
+    saida = tmp_path/'saida'
+    saida.mkdir()
+    anterior = saida/'comissoes_por_lojista.csv'
+    anterior.write_bytes(b'anterior')
+    ok, mensagem, _ = app.executar_documentos('2026-09', [Documento('01_orbe_teste.csv', b'x')],
+                                             tmp_path/'uploads', saida)
+    assert not ok and '02_*.xlsx' in mensagem
+    assert '03_*.eml' in mensagem and 'comissões e divergências de remessa' in mensagem
+    assert not (tmp_path/'uploads').exists()
+    assert anterior.read_bytes() == b'anterior'
+
+
+@pytest.mark.parametrize('faltante,parte', [
+    ('01_orbe_teste.csv', 'comissões, divergências e notas de checkout'),
+    ('02_taxas.xlsx', 'taxas e os spreads contratados'),
+    ('03_ponte.eml', 'nota de remessa'),
+    ('04_plano.csv', 'contas contábeis corretas'),
+    ('05a_aurora.csv', 'lançamentos do Aurora'),
+    ('05b_meridiano.ofx', 'lançamentos do Meridiano'),
+])
+def test_upload_falta_documento_explica_parte_da_analise(tmp_path, faltante, parte):
+    nomes = ['01_orbe_teste.csv', '02_taxas.xlsx', '03_ponte.eml', '04_plano.csv',
+             '05a_aurora.csv', '05b_meridiano.ofx']
+    documentos = [Documento(n, b'x') for n in nomes if n != faltante]
+    ok, mensagem, _ = app.executar_documentos('2026-09', documentos, tmp_path/'uploads', tmp_path/'saida')
+    assert not ok and parte in mensagem and 'Falta' in mensagem
+    assert not (tmp_path/'uploads').exists()
+
+
+def test_upload_xlsx_duplicado_e_email_ausente_mostra_ambos(tmp_path):
+    documentos = [Documento('02_taxas.xlsx', b'x'), Documento('02_taxas_copia.xlsx', b'x')]
+    ok, mensagem, _ = app.executar_documentos('2026-09', documentos, tmp_path/'uploads', tmp_path/'saida')
+    assert not ok
+    assert '2 arquivos de planilha de taxas' in mensagem
+    assert 'Mantenha apenas um' in mensagem and 'checkout' in mensagem
+    assert '03_*.eml' in mensagem and 'remessa' in mensagem
+    assert not (tmp_path/'uploads').exists()
+
+
+def test_render_encaminha_documentos_enviados(monkeypatch):
+    falso = _StreamlitFalso()
+    falso.documentos = [Documento('01_orbe_teste.csv', b'x')]
+    monkeypatch.setitem(sys.modules, 'streamlit', falso)
+    monkeypatch.setattr(app, 'competencia_padrao', lambda:'2026-09')
+    recebidos = []
+    def executar(competencia, documentos):
+        recebidos.append((competencia, documentos))
+        return False, 'Lote incompleto', []
+    monkeypatch.setattr(app, 'executar_documentos', executar)
+    monkeypatch.setattr(app, 'ler_saida', lambda _:{n:[] for n in app.ESQUEMAS})
+    app.render()
+    assert recebidos == [('2026-09', falso.documentos)]
+    uploader, = [c for c in falso.chamadas if c[0] == 'file_uploader']
+    assert uploader[2]['accept_multiple_files'] is True

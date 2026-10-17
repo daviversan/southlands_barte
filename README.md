@@ -113,6 +113,15 @@ streamlit run src/app.py
 
 A tela não tem regra de negócio: chama o mesmo `main.run()` da CLI e só lê `saida/`.
 
+Na barra lateral, informe o **mês analizado** no formato `AAAA-MM` e arraste os
+documentos para **Documentos do mês** (ou clique para selecioná-los). Envie juntos
+os arquivos originais `01_orbe_*.csv`, `02_*.xlsx`, `03_*.eml`, `04_*.csv`,
+`05a_*.csv` e `05b_*.ofx`; `06_orbe_ajustes_*.csv` é opcional. Clique em **Rodar**.
+O lote enviado é usado sozinho, sem completar arquivos ausentes com dados de
+exemplo. Os documentos permanecem em `context/uploads/<lote>/` para auditoria,
+com os nomes e conteúdos originais, e são ignorados pelo Git.
+Sem envio, a tela usa o pacote de exemplo em `context/tarvo_data_pack`.
+
 ## Limitações conhecidas
 
 - Linha bancária sem regra vira pendência `HUMANO` para o Contador; não há classificação por IA.

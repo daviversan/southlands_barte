@@ -2,8 +2,7 @@
 
 Sem regra de negócio: a execução é `main.run()` (a mesma da CLI) e o resto só lê os CSVs de `saida/`.
 O Streamlit é opcional e só é importado em `render()`; os auxiliares de leitura são testáveis sem ele.
-Entrada e saída são as pastas do repositório (`context/tarvo_data_pack` e `saida/`); a tela só pede
-a competência.
+Dados podem ser enviados pela tela ou lidos do pacote de exemplo em context/tarvo_data_pack.
 
     pip install streamlit
     streamlit run src/app.py
@@ -17,6 +16,7 @@ import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 RAIZ = Path(__file__).resolve().parent.parent
 if str(RAIZ) not in sys.path:  # `streamlit run` executa o arquivo como script, fora do pacote
@@ -27,6 +27,7 @@ from src.core.saida import ARQUIVOS_EMISSIVEIS, ESQUEMAS, QUEM_DECIDE  # noqa: E
 
 ENTRADA = RAIZ / "context" / "tarvo_data_pack"
 SAIDA = RAIZ / "saida"
+UPLOADS = RAIZ / "context" / "uploads"
 
 TITULOS = {
     "comissoes_por_lojista": "Comissões por lojista",
@@ -137,6 +138,35 @@ def executar(competencia: str, entrada: Path = ENTRADA, saida: Path = SAIDA) -> 
     return True, buffer.getvalue(), resultado.get("conferencia", [])
 
 
+def salvar_documentos(documentos, pasta: Path) -> Path:
+    """Guarda um lote exclusivo, preservando nomes e bytes para o rastro."""
+    arquivos = []
+    for documento in documentos:
+        nome = documento.name
+        if (not nome or nome in ('.', '..') or any(c in nome for c in '/\\:')
+                or Path(nome).suffix.lower() not in ('.csv', '.xlsx', '.eml', '.ofx')):
+            raise ValueError(f'Nome ou formato de arquivo inválido: {nome}')
+        arquivos.append((nome, documento.getvalue()))
+    if not arquivos:
+        raise ValueError('Selecione os documentos do mês para enviar.')
+    main.validar_arquivos_entrada([nome for nome, _ in arquivos], exigir_orbe=True)
+    pasta = Path(pasta)
+    pasta.mkdir(parents=True, exist_ok=False)
+    for nome, conteudo in arquivos:
+        (pasta / nome).write_bytes(conteudo)
+    return pasta
+
+
+def executar_documentos(competencia: str, documentos, uploads: Path = UPLOADS,
+                        saida: Path = SAIDA) -> tuple[bool, str, list]:
+    try:
+        main._validar_competencia(competencia)
+        entrada = salvar_documentos(documentos, Path(uploads) / uuid4().hex)
+    except (OSError, ValueError) as erro:
+        return False, f'Não foi possível preparar os documentos: {erro}', []
+    return executar(competencia, entrada, saida)
+
+
 def _md(texto: str) -> str:
     """No markdown do Streamlit, dois `$` viram fórmula: escapa o cifrão de "R$"."""
     return texto.replace("$", "\\$")
@@ -150,13 +180,30 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
 
     with st.sidebar:
         st.header("Rodar o fechamento")
-        competencia = st.text_input("Competência (AAAA-MM)", competencia_padrao())
+        competencia = st.text_input("mês analizado", competencia_padrao(), help="Informe o ano com quatro dígitos e o mês com dois, no formato AAAA-MM.")
+        documentos = st.file_uploader("Documentos do mês", type=['csv', 'xlsx', 'eml', 'ofx'],
+                                     accept_multiple_files=True,
+                                     help="Arraste todos os arquivos do fechamento ou clique para selecioná-los.")
+        st.caption("Envie os arquivos originais: 01_orbe_*.csv, 02_*.xlsx (taxas), "
+                   "03_*.eml (Ponte), 04_*.csv (plano de contas), 05a_*.csv (Aurora) e "
+                   "05b_*.ofx (Meridiano). Ajustes 06_orbe_ajustes_*.csv são opcionais.")
+        if documentos:
+            st.caption(f"{len(documentos)} arquivo(s) selecionado(s). O fechamento usará somente estes documentos.")
+        else:
+            st.caption("Sem documentos enviados, Rodar usa os dados de exemplo de context/tarvo_data_pack.")
         if st.button("Rodar", type="primary"):
             with st.spinner("Lendo arquivos, calculando e conferindo..."):
-                st.session_state["execucao"] = executar(competencia)
-        st.caption(f"Entrada: {ENTRADA.relative_to(RAIZ)}/ (arquivos como vêm). "
-                   f"Saída: {SAIDA.relative_to(RAIZ)}/. É o mesmo comando da CLI; se a conferência "
-                   "falhar, a saída anterior é mantida.")
+                st.session_state["execucao"] = (executar_documentos(competencia, documentos)
+                                                if documentos else executar(competencia))
+                if st.session_state['execucao'][0]:
+                    st.session_state['mes_publicado'] = competencia
+        st.caption("Se a conferência falhar, a saída anterior é mantida.")
+
+    mes_publicado = st.session_state.get('mes_publicado')
+    if mes_publicado:
+        st.caption(f"Mês dos resultados publicados nesta sessão: {mes_publicado}.")
+        if mes_publicado != competencia:
+            st.info("O mês selecionado mudou. Clique em Rodar para gerar os resultados desse mês.")
 
     execucao = st.session_state.get("execucao")
     if execucao:
