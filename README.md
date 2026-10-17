@@ -38,7 +38,7 @@ configurar `ANTHROPIC_API_KEY` nem outra credencial.
 | `README.md` | este arquivo |
 | `HIPOTESES.md` | premissas assumidas, perguntas ao financeiro e respostas recebidas |
 | `PROMPTS/` | histórico das sessões de IA (transcripts e sumários) + `MOMENTOS.md` |
-| `saida/` | os seis CSVs gerados a partir do data pack |
+| `saida/` | destino dos seis CSVs; não são versionados, o comando acima os gera do zero |
 | `src/` | código: `ingest/` (leitura das fontes), `regras/` (cálculos), `core/` (contrato de saída e conferência), `main.py` (CLI), `app.py` (tela) |
 | `config/` | regras e cadastro mestre de lojistas (`regras.yaml`, `lojistas.yaml`) |
 | `tests/` | testes automáticos |
