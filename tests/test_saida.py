@@ -56,6 +56,12 @@ def test_float_e_rejeitado():
         Saida().emitir("comissoes_por_lojista", com(16.37), [(ORBE, "TX1", D("16.37"))])
 
 
+@pytest.mark.parametrize("valor", [D("NaN"), D("Infinity"), D("-Infinity")])
+def test_valor_nao_finito_e_rejeitado(valor):
+    with pytest.raises(SaidaError, match="finito"):
+        Saida().emitir("comissoes_por_lojista", com(valor), [(ORBE, "TX1", D("1"))])
+
+
 @pytest.mark.parametrize("campo,valor", [
     ("cnpj", "123"), ("cnpj", "12.345.678/0001-90"), ("cnpj", None), ("linha_negocio", "OUTRA"),
     ("lojista", " "),

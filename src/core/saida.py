@@ -103,9 +103,12 @@ def _como_decimal(coluna: str, v) -> Decimal:
     if isinstance(v, float):
         raise SaidaError(f"{coluna}: float não permitido, use Decimal (veio {v!r})")
     try:
-        return Decimal(v)
+        numero = Decimal(v)
     except Exception:
         raise SaidaError(f"{coluna}: número inválido {v!r}") from None
+    if not numero.is_finite():
+        raise SaidaError(f"{coluna}: número deve ser finito (veio {v!r})")
+    return numero
 
 
 class Saida:
