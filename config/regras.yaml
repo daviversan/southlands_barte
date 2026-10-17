@@ -26,12 +26,17 @@ checkout:
       quem_decide: Comercial        # ASSUMIDO: segue a tabela de tipos do contrato técnico
       motivo: pode ser Horizonte Viagens ou Novo Horizonte (ambos sem EC na planilha); não adivinhar, uma pessoa precisa confirmar.
 
+notas:
+  # {competencia} = AAAA-MM; {n_transacoes} = nº de linhas de origem da nota
+  discriminacao_checkout: "Comissão de checkout (MDR e antecipação, líquida de estornos), competência {competencia}, {n_transacoes} transações"
+  discriminacao_remessa: "Participação de 50% no spread de câmbio, competência {competencia}, {n_transacoes} operações"
+
 remessa:
   participacao_tarvo: 0.5           # SABEMOS (e-mail da Ponte)
   base_spread: realizado            # CONFIRMADO (P6): Spread R$, não o estimado D-1
   spread_negativo: contestacao      # CONFIRMADO: fora da comissão e da nota; quem_decide = Financeiro
   operacao_repetida: contar_uma_vez # CONFIRMADO: conta 1x e vai para a lista de correção da Ponte
-  precisao_spread_pct: 0.00001      # DECIDIDO: relatório traz Spread % com 5 casas
+  precisao_spread_pct: 0.00001      # DECIDIDO: relatório traz Spread % com 5 casas. FRAÇÃO: o código converte para p.p. (0,001)
   aprovado_com_ressalva_entra: true # ASSUMIDO (P10): segue o e-mail da Ponte
   spread_padrao: null               # ABERTA (P4): sem valor, divergência desses lojistas não é calculada
   nf_tomador:                       # SABEMOS (assinatura do e-mail da Ponte)
@@ -40,4 +45,41 @@ remessa:
 
 bancos:
   folha_e_impostos_de_08: baixa_provisao   # ASSUMIDO (P12): baixa_provisao | despesa
+  aurora_ref_offset: 0                     # 0 = L9 (linha física, padrão); 1 = convenção L10 do enunciado (pergunta aberta)
+  janela_contrapartida_dias: 3             # DECIDIDO (H3): transferência entre contas casa em até N dias
   confianca_minima_ia: 0.8                 # Extra: abaixo disso vira pendência HUMANO
+  # Lista ORDENADA: a primeira regra que casa vence. Padrão sobre a descrição sem acento, em maiúsculas.
+  # conta_por_modo: escolhido por folha_e_impostos_de_08; null = o plano não tem conta (vira pendência).
+  regras:
+    # --- Aurora --------------------------------------------------------------------------------
+    - {id: pix_contabilidade, banco: AURORA, padrao: '^PIX ENVIADO CONTABILIDADE', conta: "4.2.06"}  # antes de pix_lojista
+    - {id: pix_sem_identificacao, banco: AURORA, padrao: '^PIX RECEBIDO .*SEM IDENTIFICACAO',
+       conta: "1.1.09.002", pendencia: CREDITO_NAO_IDENTIFICADO}
+    - {id: ted_orbe, banco: AURORA, padrao: '^TED RECEBIDA .*ORBE', conta: "1.1.03.001"}
+    - {id: transf_entre_contas, banco: AURORA, padrao: '^TRANSF ENTRE CONTAS', conta: "1.1.09.001",
+       contrapartida: ted_mesma_titularidade}
+    - {id: devolucao_pix, banco: AURORA, padrao: '^DEVOLUCAO PIX', conta: "2.1.01.002"}
+    - {id: pix_lojista, banco: AURORA, padrao: '^PIX ENVIADO ', conta: "2.1.01.001"}
+    - {id: tarifa_aurora, banco: AURORA, padrao: '^TAR ', conta: "4.2.01"}
+    - {id: condominio, banco: AURORA, padrao: 'CONDOMINIO', conta: "4.2.02"}
+    - {id: aws, banco: AURORA, padrao: 'AMAZON WEB SERVICES', conta: "4.2.03"}
+    - {id: google_workspace, banco: AURORA, padrao: 'GOOGLE WORKSPACE', conta: "4.2.04"}
+    # Folha e impostos de 08/2026 (ASSUMIDO, P12). Em "despesa" o plano só tem conta para salários.
+    - {id: darf_pis, banco: AURORA, padrao: '^DEBITO DARF 8109', conta_por_modo: {baixa_provisao: "2.1.03.001", despesa: null}}
+    - {id: darf_cofins, banco: AURORA, padrao: '^DEBITO DARF 2172', conta_por_modo: {baixa_provisao: "2.1.03.002", despesa: null}}
+    - {id: darf_irrf, banco: AURORA, padrao: '^DEBITO DARF 0561', conta_por_modo: {baixa_provisao: "2.1.03.004", despesa: null}}
+    - {id: iss, banco: AURORA, padrao: '^PAGTO ISS', conta_por_modo: {baixa_provisao: "2.1.03.003", despesa: null}}
+    - {id: salarios, banco: AURORA, padrao: '^PAGTO SALARIOS', conta_por_modo: {baixa_provisao: "2.1.04.001", despesa: "4.1.01"}}
+    - {id: gps_inss, banco: AURORA, padrao: '^GPS INSS', conta_por_modo: {baixa_provisao: "2.1.04.002", despesa: null}}
+    - {id: grf_fgts, banco: AURORA, padrao: '^GRF FGTS', conta_por_modo: {baixa_provisao: "2.1.04.003", despesa: null}}
+    # --- Meridiano -----------------------------------------------------------------------------
+    - {id: ted_mesma_titularidade, banco: MERIDIANO, padrao: '^TED RECEBIDA TARVO .*MESMA TITULARIDADE', conta: "1.1.09.001"}
+    - {id: repasse_ponte, banco: MERIDIANO, padrao: '^TED RECEB PONTE CAMBIO .*REPASSE COMISSAO', conta: "1.1.03.002"}  # ASSUMIDO (P14)
+    - {id: ted_ponte_liquidacao, banco: MERIDIANO, padrao: '^TED ENVIADA PONTE CAMBIO .*LIQ OPERACOES', conta: "2.1.02.001"}  # ASSUMIDO
+    - {id: pix_receb_lojista, banco: MERIDIANO, padrao: '^PIX RECEB ', conta: "2.1.02.001"}
+    - {id: aplicacao_cdb, banco: MERIDIANO, padrao: '^APLICACAO AUTOMATICA CDB', conta: "1.1.02.001"}
+    - {id: resgate_cdb, banco: MERIDIANO, padrao: '^RESGATE AUTOMATICO CDB', conta: "1.1.02.001"}
+    - {id: rendimento, banco: MERIDIANO, padrao: '^RENDIMENTO APLIC', conta: "3.2.01"}
+    - {id: iof, banco: MERIDIANO, padrao: '^IOF S/ OPERACAO CREDITO', conta: "4.3.01"}
+    - {id: seguro, banco: MERIDIANO, padrao: '^SEGURO EMPRESARIAL', conta: "4.2.05"}
+    - {id: tarifa_meridiano, banco: MERIDIANO, padrao: '^TARIFA ', conta: "4.2.01"}
