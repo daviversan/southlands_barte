@@ -6,5 +6,3 @@ __pycache__/
 *.pyc
 southlands_barte.code-workspace
 .DS_Store
-saida/*
-!saida/.gitkeep

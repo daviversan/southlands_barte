@@ -38,10 +38,6 @@ TITULOS = {
 }
 
 
-# Coluna `origem_motivo` de pendencias.csv, como aparece na tela.
-ROTULO_MOTIVO = {"REGRA": "regra", "IA": "gerado por IA", "PADRAO": "texto padrão"}
-
-
 def competencia_padrao(hoje: date | None = None) -> str:
     """Mês anterior ao atual: o fechamento roda depois de o mês acabar."""
     hoje = hoje or date.today()
@@ -234,13 +230,9 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             coluna.metric(quem, f"{len(ps)} pendência(s)")
         for quem, ps in fila.items():
             with st.expander(f"{quem} — {len(ps)} pendência(s)"):
-                st.dataframe([{**{k: p.get(k, "") for k in ("id_saida", "tipo", "ref_origem", "valor_brl",
-                                                            "motivo", "sugestao")},
-                               "texto": ROTULO_MOTIVO.get(p.get("origem_motivo", ""), "")} for p in ps],
+                st.dataframe([{k: p.get(k, "") for k in ("id_saida", "tipo", "ref_origem", "valor_brl",
+                                                         "motivo", "sugestao")} for p in ps],
                              use_container_width=True, hide_index=True)
-        if any(p.get("origem_motivo") == "IA" for ps in fila.values() for p in ps):
-            st.caption("\"gerado por IA\": a regra não sabia explicar o caso e a IA redigiu a leitura e a "
-                       "sugestão. Valores e decisões não mudam; confirmar antes de agir.")
 
 
 if __name__ == "__main__":
