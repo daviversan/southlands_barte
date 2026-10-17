@@ -92,6 +92,10 @@ def test_taxas_aba_vigente_tipos_mistos_e_refs(tmp_path):
     assert b["cnpj"] == "03229837000103" and b["ec"] == "1000000002" and b["ativo"] is False
     assert (b["vigencia_inicio"], b["vigencia_fim"]) == (None, None)
     assert all(v is None for v in r["taxas_pct"].values()) and r["ec"] is None
+    # Alvo: antecipação e spread de remessa; vazio e "padrão" = None (spread padrão, P4)
+    assert a["taxas_pct"]["ANTECIPACAO"] == D("2.10")
+    assert a["spread_remessa_pct"] is None and b["spread_remessa_pct"] is None
+    assert r["spread_remessa_pct"] == D("1.25")
 
 
 def test_cadastro_so_com_ec_e_nao_sobrescreve(tmp_path):
@@ -121,3 +125,6 @@ def test_data_pack_taxas_e_cadastro():
     assert [(c["vigencia_inicio"], c["vigencia_fim"]) for c in bridge] == [(None, "2026-09-14"), ("2026-09-15", None)]
     assert [c["taxas_pct"]["CREDITO_A_VISTA"] for c in bridge] == [D("2.59"), D("2.19")]
     assert len(ler_orbe(pack)) == 1957
+    spreads = {c["lojista"]: c["spread_remessa_pct"] for c in cs}
+    assert spreads["Mundo Aberto"] == D("1.20") and spreads["Canguru"] is None  # 'padrão'
+    assert sum(1 for c in cs if c["taxas_pct"]["ANTECIPACAO"] == D("2.10")) == 23

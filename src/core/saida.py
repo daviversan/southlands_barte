@@ -51,6 +51,8 @@ class Esquema:
     datas: tuple[str, ...] = ()
     enums: tuple[tuple[str, tuple[str, ...]], ...] = ()
     textos: tuple[str, ...] = ()  # obrigatoriamente não vazias
+    # (coluna, coluna de condição, valor): a coluna de `textos` pode ficar vazia nessa condição
+    vazio_se: tuple[tuple[str, str, str], ...] = ()
 
 
 ESQUEMAS: dict[str, Esquema] = {
@@ -78,6 +80,7 @@ ESQUEMAS: dict[str, Esquema] = {
         valor="valor", pct=("confianca",), datas=("data",),
         enums=(("banco", BANCOS), ("metodo", METODOS)),
         textos=("ref_origem", "descricao", "conta_codigo"),
+        vazio_se=(("conta_codigo", "metodo", "HUMANO"),),  # linha sem regra não tem conta
     ),
     "pendencias": Esquema(
         "PEN", ("id_saida", "tipo", "ref_origem", "valor_brl", "motivo", "quem_decide"),
@@ -137,11 +140,8 @@ class Saida:
         if sobrando:
             raise SaidaError(f"{arquivo}: colunas não previstas {sorted(sobrando)}")
 
-        humano = arquivo == 'lancamentos_classificados' and linha.get('metodo') == 'HUMANO'
-        if humano and _como_decimal('confianca', linha['confianca']) != 0:
-            raise SaidaError('Lançamento HUMANO exige confiança zero')
-        campos = {c: ('' if humano and c == 'conta_codigo' and not linha[c]
-                      else self._validar(arquivo, esq, c, linha[c])) for c in linha}
+        livres = {c for c, cond, v in esq.vazio_se if str(linha.get(cond)) == v}
+        campos = {c: self._validar(arquivo, esq, c, linha[c], c in livres) for c in linha}
         valor = q2(_como_decimal(esq.valor, linha[esq.valor]))
         campos[esq.valor] = _fmt_decimal(valor)
 
@@ -170,7 +170,7 @@ class Saida:
         return id_saida
 
     @staticmethod
-    def _validar(arquivo: str, esq: Esquema, col: str, v) -> str:
+    def _validar(arquivo: str, esq: Esquema, col: str, v, pode_vazio: bool = False) -> str:
         if col == esq.valor:
             return ""  # preenchido por emitir() após o arredondamento
         if col in esq.pct:
@@ -186,7 +186,7 @@ class Saida:
         for c, validos in esq.enums:
             if col == c and s not in validos:
                 raise SaidaError(f"{arquivo}.{col}: {s!r} fora de {validos}")
-        if col in esq.textos and not s.strip():
+        if col in esq.textos and not s.strip() and not pode_vazio:
             raise SaidaError(f"{arquivo}.{col}: não pode ser vazio")
         return s
 

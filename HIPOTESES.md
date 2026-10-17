@@ -86,18 +86,18 @@ Não consta no `00_LEIA-ME.md`, no enunciado nem no `DICIONARIO_DADOS.md`. **[SA
 
 ## 5. Alvo: hipóteses e decisões (CONTRATO_TECNICO_ALVO.md)
 
-Registradas na elaboração do contrato do Alvo. Nenhuma delas veio do financeiro; as marcadas **[PROPOSTO]** aguardam confirmação do time (contrato Alvo §10) e podem mudar números.
+Registradas na elaboração do contrato do Alvo. Nenhuma delas veio do financeiro. As propostas do contrato Alvo §10 foram **implementadas pela recomendação do próprio contrato** e passam a **[DECIDIDO]**; se o time mudar alguma, é parâmetro ou ajuste pontual (indicado na coluna "Efeito").
 
 | # | Hipótese / decisão | Etiqueta | Efeito e parâmetro |
 |---|---|---|---|
-| H1 | **Arredondamento da remessa por operação** (`q2(Spread R$ × 0,5)` por linha; comissão do lojista = soma das linhas), coerente com §2 | [PROPOSTO] | Comissão REMESSA = **R$ 39.543,45**; a conta "50% × Σ" daria R$ 39.542,88 (diferença +R$ 0,57). NF REMESSA = R$ 39.543,45. Os 39.542,88 de §3.4 e do PLANO A4 ficam como preliminar superado, se confirmado. Alternativa (arredondar só o total) exigiria linha de ajuste no rastro, vedada pelo contrato |
-| H2 | **`ref_origem` da operação repetida = `<Nº Operação>#<k>`** (k = ordem da ocorrência: `PC-0926-0162#2`), com origem no `.eml` | [PROPOSTO] | Evita duplicar `ref_origem` no rastro. Alternativa: linha física (`Operações!L77`). A e B devem combinar |
+| H1 | **Arredondamento da remessa por operação** (`q2(Spread R$ × 0,5)` por linha; comissão do lojista = soma das linhas), coerente com §2 | [DECIDIDO] | Comissão REMESSA = **R$ 39.543,45**; a conta "50% × Σ" daria R$ 39.542,88 (diferença +R$ 0,57). NF REMESSA = R$ 39.543,45. Os 39.542,88 de §3.4 e do PLANO A4 ficam como preliminar superado. Alternativa (arredondar só o total) exigiria linha de ajuste no rastro, vedada pelo contrato |
+| H2 | **`ref_origem` da operação repetida = `<Nº Operação>#<k>`** (k = ordem da ocorrência: `PC-0926-0162#2`), com origem no `.eml` | [DECIDIDO] | Evita duplicar `ref_origem` no rastro; o motivo da pendência cita a linha física (77). `remessa.ref_ocorrencia` |
 | H3 | **Janela de contrapartida de transferência entre contas = 3 dias** | [DECIDIDO] | `bancos.janela_contrapartida_dias`. Os 3 pares do data pack batem no mesmo dia. Sem par: `TRANSFERENCIA_SEM_CONTRAPARTIDA` (R$ 300 mil de 30/09, pergunta 15 aberta) |
-| H4 | **`conta_codigo` pode ser vazio quando `metodo = HUMANO`** (`confianca = 0`) | [PROPOSTO] | Exige relaxar a validação em `saida.py` só nesse caso. Hoje nenhum lançamento cai aqui (as 184 casam por regra); teste sintético. Conferir no enunciado |
+| H4 | **`conta_codigo` pode ser vazio quando `metodo = HUMANO`** (`confianca = 0`) | [DECIDIDO] | `saida.py` aceita vazio só nesse caso (`Esquema.vazio_se`). Hoje nenhum lançamento cai aqui (as 184 casam por regra); teste sintético. Conferir no enunciado |
 | H5 | **Tolerância do spread de remessa em pontos percentuais**: `precisao_spread_pct` (0,00001 em fração) vale **0,001 p.p.** | [DECIDIDO] | Converter `× 100` no código; chave do YAML mantida em fração. Testar com a operação de ~R$ 0,03 |
 | H6 | **`OPERACAO_POSSIVEL_DUPLICIDADE` só sinaliza** (mesmo CNPJ, Valor ME, moeda e data com `Nº Operação` diferente); a operação continua na comissão | [ASSUMIDO] | Critério de "mesmos campos" não foi comentado pela Helena (P9). Hoje não ocorre além da própria `PC-0926-0162` |
 | H7 | **Divergência de remessa não calculada para spread padrão** (célula vazia ou `padrão`); a comissão é calculada normalmente | [ASSUMIDO] | Pergunta 4 aberta. 51 operações sem divergência calculada (Kiwi, Ponte Aérea, Canguru). `spread_remessa_pct = None` |
-| H8 | **Modo `despesa` de folha e impostos de 08 não tem conta para INSS e FGTS** no plano (só 4.1.01 Salários); essas linhas viram `LANCAMENTO_NAO_CLASSIFICADO` | [ASSUMIDO] | Pergunta 12 aberta; padrão `baixa_provisao` (2.1.04.001/.002/.003) |
+| H8 | **Modo `despesa` de folha e impostos de 08 não tem conta para INSS, FGTS, PIS, COFINS, IRRF e ISS** no plano (só 4.1.01 Salários); essas linhas viram `LANCAMENTO_NAO_CLASSIFICADO` | [ASSUMIDO] | Pergunta 12 aberta; padrão `baixa_provisao` (2.1.04.001/.002/.003 e 2.1.03.001–.004). Regras com `conta_por_modo` em `bancos.regras` |
 | H9 | **Estorno e reversão: a taxa e a vigência vêm da `data_venda_original`; a comissão abate o mês do estorno** (agosto não reabre). Estorno de venda de agosto é resolvido por `data_venda_original` + EC, sem precisar achar a original | [CONFIRMADO] P2/P3 | 9 estornos de agosto fora do arquivo. Estorno em 15/09 ou depois de venda da Bridge anterior a 15/09 usa 2,59% |
 | H10 | **Divergência de estorno tem sinal negativo** (`diferenca_brl = bruto × (aplicada − contratada)`, bruto negativo): devolução do excesso. Positivo = lojista pagou a mais | [DECIDIDO] | 4 estornos de divergentes no data pack. Divergência não é restituição (pergunta 1 não respondeu sobre devolver a diferença) |
 | H11 | **Linha bloqueada de qualquer tipo da Orbe rastreia o bruto assinado**; tipo de lançamento desconhecido, estorno em dobro e sinal inconsistente viram `LANCAMENTO_INVALIDO` | [DECIDIDO] | Nada some em silêncio; `fora_escopo_por_tipo` fica vazio no Alvo |
@@ -119,17 +119,14 @@ Verificações do data pack, não constantes do algoritmo; o número final sai d
 - **Bancos:** 84 Aurora + 100 Meridiano = 184, todas por regra; pendências: Pix sem identificação (R$ 7.350,00) e TED sem contrapartida (−R$ 300.000,00).
 - **Notas:** 18 CHECKOUT + 1 REMESSA. Σ NF CHECKOUT = R$ 191.464,34 **se nenhum dos 18 lojistas tiver saldo ≤ 0** (a verificar).
 
-### 5.2 Implementação de B e verificação
+### 5.2 Resultado da implementação do Alvo (`saida/` regenerada do zero)
 
-As decisões H1–H8 orientam a implementação de B: arredondamento por operação
-(comissão R$ 39.543,45), referência da repetida com `#2`, janela de contrapartida
-de 3 dias e conta vazia exclusivamente para `HUMANO` com confiança zero.
-A tolerância configurada em fração é convertida para pontos percentuais.
-Possível duplicidade apenas sinaliza; spread padrão não gera divergência nem
-pendência. No modo `despesa`, INSS/FGTS exigem classificação humana.
+Todos os números de §5.1 conferem com a saída, ao centavo:
 
-Os testes de B conferem remessa e bancos contra as entradas reais e validam
-publicação determinística com interfaces sintéticas de checkout/notas de A.
-A reconciliação obtida é R$ 78.073,59 − R$ 821,88 − (−R$ 1.834,05) =
-R$ 79.085,76 de base. Não foi realizada revisão cruzada por outra pessoa;
-o fechamento real integrado aguarda a entrega de A descrita no README.
+- **Checkout:** 1.957 = 1.666 processadas + 291 bloqueadas (VENDA 1.574/267, ESTORNO 57/12, ANTECIPACAO 30/8, REVERSAO 5/4); comissão R$ 191.464,34 em 18 lojistas; nenhum saldo ≤ 0, então **nenhuma `NF_NAO_EMITIDA`**.
+- **Divergências:** 92 de checkout (R$ 1.576,23 líquido) + 41 de remessa (R$ 1.419,05).
+- **Remessa:** 233 = 228 válidas + 4 `CONTESTACAO` + 1 `OPERACAO_REPETIDA`; base R$ 79.085,76; comissão R$ 39.543,45 em 14 CNPJs; 51 operações sem spread contratado.
+- **Notas:** 18 CHECKOUT (Σ R$ 191.464,34) + 1 REMESSA para a Ponte (R$ 39.543,45).
+- **Bancos:** 184 por regra (`HUMANO = 0`); pendências `CREDITO_NAO_IDENTIFICADO` (L50, R$ 7.350,00) e `TRANSFERENCIA_SEM_CONTRAPARTIDA` (L92, −R$ 300.000,00).
+- **Pendências:** 302 (Financeiro 171, Comercial 131). Duas execuções seguidas geram arquivos idênticos (hash).
+- **Recálculo independente** (script lendo os arquivos brutos, sem o código do projeto): reversões AN88445114 (−1.008,89) e AN88445216 (−840,45) a 2,10%; remessa PC-0926-0002 (131,01), PC-0926-0113 (83,97), PC-0926-0236 (177,98) a 50%; divergência PC-0926-0011 (`Spread R$ − Valor ME × PTAX × 1,20%` = 29,56). Todos batem com o rastro. **A revisão cruzada A↔B (A17) continua pendente** e deve ser feita por quem não escreveu o código.

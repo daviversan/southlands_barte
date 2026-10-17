@@ -95,6 +95,14 @@ def test_lancamento_valida_enums_data_e_confianca():
             Saida().emitir("lancamentos_classificados", {**base, campo: valor}, orig)
 
 
+def test_conta_vazia_so_para_humano():
+    base = {"banco": "MERIDIANO", "ref_origem": "MRD1", "data": "2026-09-01", "descricao": "X",
+            "valor": D("10.00"), "conta_codigo": "", "metodo": "HUMANO", "confianca": D("0")}
+    Saida().emitir("lancamentos_classificados", base, [("05b.ofx", "MRD1", D("10.00"))])
+    with pytest.raises(SaidaError, match="conta_codigo"):
+        Saida().emitir("lancamentos_classificados", {**base, "metodo": "REGRA"}, [("05b.ofx", "MRD1", D("10.00"))])
+
+
 def test_pendencia_exige_tipo_motivo_e_quem_decide():
     base = {"tipo": "CONTESTACAO", "ref_origem": "PC-1", "valor_brl": D("-10"),
             "motivo": "Trava de 2 horas excedida", "quem_decide": "Financeiro"}

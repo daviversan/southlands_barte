@@ -1,14 +1,22 @@
-"""Comissão de checkout (nível Mínimo): só `VENDA`, pela taxa **contratada**.
+"""Comissão e divergência de checkout (nível Alvo): todos os tipos de lançamento da Orbe.
 
 Regra (CONFIRMADO, P1): comissão = valor_bruto x taxa_contratada, a taxa inteira, sem descontar o
-custo da Orbe e sem usar a taxa aplicada. Arredondamento por venda (ROUND_HALF_UP) e o total do
-lojista é a soma das linhas arredondadas (HIPOTESES.md §2).
+custo da Orbe e sem usar a taxa aplicada. Arredondamento por linha (ROUND_HALF_UP) e o total do
+lojista é a soma das linhas arredondadas (HIPOTESES.md §2). Linhas negativas (estorno, reversão)
+contribuem com sinal negativo.
+
+Por tipo (CONTRATO_TECNICO_ALVO.md §5.1):
+- VENDA: faixa da modalidade/parcelas, vigência pela `data_movimento`;
+- ANTECIPACAO: taxa de antecipação, vigência pela `data_movimento`;
+- ESTORNO: faixa do próprio estorno, vigência pela `data_venda_original` (CONFIRMADO, P2);
+- REVERSAO ANTECIPACAO: taxa de antecipação, vigência pela `data_venda_original`.
+Estorno e reversão abatem o mês em que ocorrem; a data original só escolhe a taxa.
 
 Função pura: recebe registros, devolve registros com as origens. Não grava arquivo e não conhece o
 gravador (a fronteira com `core/saida.py` está em CONTRATO_TECNICO_MINIMO.md §1). Nada de EC, CNPJ
 ou nome de lojista aqui: identidade vem do cadastro e taxas vêm da planilha.
 
-Cada venda aparece exatamente uma vez: numa origem de comissão ou numa pendência bloqueante.
+Cada linha aparece exatamente uma vez: numa origem de comissão ou numa pendência bloqueante.
 """
 from __future__ import annotations
 
@@ -21,6 +29,7 @@ from src.core import normalize
 from src.core.contratos import (
     ComissaoCalculada,
     ContratoTaxa,
+    DivergenciaCalculada,
     Origem,
     PendenciaCalculada,
     ResultadoCheckout,
@@ -29,11 +38,22 @@ from src.core.contratos import (
 
 CENTO = Decimal("100")
 TIPO_VENDA = "VENDA"
+TIPO_ESTORNO = "ESTORNO"
+TIPO_ANTECIPACAO = "ANTECIPACAO"
+TIPO_REVERSAO = "REVERSAO ANTECIPACAO"
+# tipo -> (sinal esperado do bruto, usa data_venda_original?, tipo exigido da original)
+_TIPOS = {
+    TIPO_VENDA: (1, False, None),
+    TIPO_ANTECIPACAO: (1, False, None),
+    TIPO_ESTORNO: (-1, True, TIPO_VENDA),
+    TIPO_REVERSAO: (-1, True, TIPO_ANTECIPACAO),
+}
 
 # (tipo, quem_decide) de cada problema, conforme CONTRATO_TECNICO_MINIMO.md §3
 _QUEM = {
     "CADASTRO_NAO_RESOLVIDO": "Financeiro",
     "VENDA_INVALIDA": "Financeiro",
+    "LANCAMENTO_INVALIDO": "Financeiro",
     "CONTRATO_AUSENTE": "Comercial",
     "CONTRATO_INATIVO": "Comercial",
     "VIGENCIA_SEM_COBERTURA": "Comercial",
@@ -91,6 +111,10 @@ def _checar_regras(regras: dict) -> dict:
         raise ValueError(f"base_comissao não suportada: {cfg['base_comissao']!r}")
     if cfg.get("vigencia_venda", "data_movimento") != "data_movimento":
         raise ValueError(f"vigencia_venda não suportada: {cfg['vigencia_venda']!r}")
+    if cfg.get("vigencia_estorno", "data_venda_original") != "data_venda_original":
+        raise ValueError(f"vigencia_estorno não suportada: {cfg['vigencia_estorno']!r}")
+    if cfg.get("estorno_abate_em", "mes_do_estorno") != "mes_do_estorno":
+        raise ValueError(f"estorno_abate_em não suportado: {cfg['estorno_abate_em']!r}")
     return cfg
 
 
@@ -106,7 +130,8 @@ def _problema_de_identidade(t: TransacaoOrbe, rotas: dict) -> _Problema:
     )
 
 
-def _resolver_contrato(t, cnpj_cadastro, por_ec) -> tuple[ContratoTaxa | None, _Problema | None]:
+def _resolver_contrato(t, data, cnpj_cadastro, por_ec) -> tuple[ContratoTaxa | None, _Problema | None]:
+    """Contrato do EC vigente em `data` (a data de vigência do tipo, não necessariamente a do movimento)."""
     candidatos = por_ec.get(t["ec"], [])
     if not candidatos:
         return None, _Problema("CONTRATO_AUSENTE", f"EC {t['ec']} está no cadastro mas não tem contrato de taxas na planilha vigente.")
@@ -116,40 +141,78 @@ def _resolver_contrato(t, cnpj_cadastro, por_ec) -> tuple[ContratoTaxa | None, _
             "CONTRATO_AMBIGUO",
             f"CNPJ do cadastro ({cnpj_cadastro}) difere do CNPJ da planilha para o EC {t['ec']} ({', '.join(divergentes)}).",
         )
-    cobrindo = [c for c in candidatos if _cobre(c, t["data_movimento"])]
+    cobrindo = [c for c in candidatos if _cobre(c, data)]
     if not cobrindo:
         if not any(c["ativo"] for c in candidatos):
             return None, _Problema("CONTRATO_INATIVO", f"Contrato do EC {t['ec']} está inativo na planilha.")
         return None, _Problema(
             "VIGENCIA_SEM_COBERTURA",
-            f"Nenhuma vigência do EC {t['ec']} cobre a data {t['data_movimento']}.",
+            f"Nenhuma vigência do EC {t['ec']} cobre a data {data}.",
         )
     if len(cobrindo) > 1:
         refs = ", ".join(c["ref_origem"] for c in cobrindo)
-        return None, _Problema("CONTRATO_AMBIGUO", f"Mais de uma vigência cobre {t['data_movimento']} para o EC {t['ec']} ({refs}).")
+        return None, _Problema("CONTRATO_AMBIGUO", f"Mais de uma vigência cobre {data} para o EC {t['ec']} ({refs}).")
     if not cobrindo[0]["ativo"]:
         return None, _Problema("CONTRATO_INATIVO", f"Contrato do EC {t['ec']} está inativo na planilha ({cobrindo[0]['ref_origem']}).")
     return cobrindo[0], None
 
 
-def _avaliar_venda(t, cadastro, por_ec, rotas):
-    """Devolve (comissão, contrato, None) ou (None, None, [problemas])."""
+def _validar_lancamento(t, tipo, por_id, estornados) -> tuple[str | None, str | None, list[_Problema]]:
+    """(faixa, data de vigência, problemas de dado). Não olha cadastro nem contrato."""
+    invalido = "VENDA_INVALIDA" if tipo == TIPO_VENDA else "LANCAMENTO_INVALIDO"
+    if tipo not in _TIPOS:
+        return None, None, [_Problema("LANCAMENTO_INVALIDO", f"Tipo de lançamento desconhecido: {t['tipo_lancamento']!r}.")]
+    sinal, usa_original, tipo_original = _TIPOS[tipo]
     problemas: list[_Problema] = []
-    contrato = None
-    faixa = None
 
     bruto = t["valor_bruto"]
-    if bruto is None or bruto <= 0:
-        problemas.append(_Problema("VENDA_INVALIDA", f"Venda com valor bruto ausente ou não positivo ({bruto})."))
-    try:
-        faixa = faixa_da_venda(t["modalidade"], t["qtd_parcelas"])
-    except ValueError as e:
-        problemas.append(_Problema("VENDA_INVALIDA", f"Não foi possível definir a faixa de taxa: {e}."))
+    if bruto is None or bruto * sinal <= 0:
+        esperado = "positivo" if sinal > 0 else "negativo"
+        problemas.append(_Problema(invalido, f"{tipo} com valor bruto ausente ou não {esperado} ({bruto})."))
+
+    faixa = None
+    if tipo in (TIPO_ANTECIPACAO, TIPO_REVERSAO):
+        faixa = "ANTECIPACAO"  # sem modalidade/parcelas: vazio estrutural, não é erro
+    else:
+        try:
+            faixa = faixa_da_venda(t["modalidade"], t["qtd_parcelas"])
+        except ValueError as e:
+            problemas.append(_Problema(invalido, f"Não foi possível definir a faixa de taxa: {e}."))
+
+    data = t["data_movimento"]
+    if usa_original:
+        data = t.get("data_venda_original")
+        if data is None:
+            problemas.append(_Problema("LANCAMENTO_INVALIDO", f"{tipo} sem data da venda original; a taxa não pode ser escolhida."))
+        elif data > t["data_movimento"]:
+            problemas.append(_Problema("LANCAMENTO_INVALIDO", f"Data da venda original ({data}) posterior ao movimento ({t['data_movimento']})."))
+        ref = t.get("id_referencia")
+        original = por_id.get(ref) if ref else None
+        if original is not None:
+            if original["ec"] != t["ec"]:
+                problemas.append(_Problema("LANCAMENTO_INVALIDO", f"EC {t['ec']} difere do EC {original['ec']} da original {ref}."))
+            if _chave(original["tipo_lancamento"]) != tipo_original:
+                problemas.append(_Problema("LANCAMENTO_INVALIDO", f"{tipo} referencia {ref}, que é {original['tipo_lancamento']} (esperado {tipo_original})."))
+        if ref:
+            if ref in estornados:
+                problemas.append(_Problema("LANCAMENTO_INVALIDO", f"Segundo {tipo} para {ref} (o primeiro é {estornados[ref]}); não abate duas vezes."))
+            else:
+                estornados[ref] = t["id_transacao"]
+    return faixa, data, problemas
+
+
+def _avaliar_linha(t, cadastro, por_ec, rotas, por_id, estornados):
+    """Devolve (comissão, contrato, taxa, None) ou (None, None, None, [problemas])."""
+    tipo = _chave(t["tipo_lancamento"])
+    faixa, data, problemas = _validar_lancamento(t, tipo, por_id, estornados)
+    if tipo not in _TIPOS:
+        return None, None, None, problemas
+    contrato = None
 
     if t["ec"] not in cadastro:
         problemas.insert(0, _problema_de_identidade(t, rotas))
-    else:
-        contrato, p = _resolver_contrato(t, cadastro[t["ec"]]["cnpj"], por_ec)
+    elif data is not None:
+        contrato, p = _resolver_contrato(t, data, cadastro[t["ec"]]["cnpj"], por_ec)
         if p:
             problemas.insert(0, p)
         elif faixa and contrato["taxas_pct"][faixa] is None:
@@ -159,14 +222,15 @@ def _avaliar_venda(t, cadastro, por_ec, rotas):
             ))
 
     if problemas:
-        return None, None, problemas
+        return None, None, None, problemas
     taxa = contrato["taxas_pct"][faixa]
-    return normalize.q2(bruto * taxa / CENTO), contrato, None
+    return normalize.q2(t["valor_bruto"] * taxa / CENTO), contrato, taxa, None
 
 
-def _pendencia_de_venda(t: TransacaoOrbe, problemas: list[_Problema]) -> PendenciaCalculada:
+def _pendencia_de_linha(t: TransacaoOrbe, problemas: list[_Problema]) -> PendenciaCalculada:
     bruto = t["valor_bruto"] if t["valor_bruto"] is not None else Decimal("0")
-    base = f"Valor da pendência = valor bruto da venda (R$ {_fmt(bruto)}), não a comissão, que ainda é desconhecida. A venda não entrou na comissão."
+    base = (f"Valor da pendência = valor bruto assinado do lançamento {t['tipo_lancamento']} (R$ {_fmt(bruto)}), "
+            "não a comissão, que ainda é desconhecida. A linha não entrou na comissão.")
     tipo, quem, _ = problemas[0]
     motivo = " | ".join(p[2] for p in problemas) + " " + base
     return {
@@ -176,6 +240,25 @@ def _pendencia_de_venda(t: TransacaoOrbe, problemas: list[_Problema]) -> Pendenc
         "motivo": motivo,
         "quem_decide": quem,
         "origens": [Origem(t["arquivo_origem"], t["ref_origem"], bruto)],
+    }
+
+
+def _divergencia(t, cnpj, taxa_contratada, limiar) -> DivergenciaCalculada | None:
+    """Compara **taxas** (nunca o valor_taxa truncado da Orbe). Positivo = lojista pagou a mais."""
+    aplicada = t["taxa_aplicada_pct"]
+    if aplicada is None or aplicada == taxa_contratada:
+        return None
+    diferenca = normalize.q2(t["valor_bruto"] * (aplicada - taxa_contratada) / CENTO)
+    if abs(diferenca) < limiar:
+        return None
+    return {
+        "cnpj": cnpj,
+        "linha_negocio": "CHECKOUT",
+        "ref_origem": t["ref_origem"],
+        "taxa_contratada_pct": taxa_contratada,
+        "taxa_aplicada_pct": aplicada,
+        "diferenca_brl": diferenca,
+        "origens": [Origem(t["arquivo_origem"], t["ref_origem"], diferenca)],
     }
 
 
@@ -215,7 +298,7 @@ def calcular_checkout(
     competencia: str,
     regras: dict,
 ) -> ResultadoCheckout:
-    """Comissão de checkout das vendas, por lojista (CNPJ), mais pendências e resumo de conservação."""
+    """Comissão de checkout por lojista (CNPJ), divergências por linha, pendências e resumo de conservação."""
     cfg = _checar_regras(regras)
     rotas = cfg.get("ec_sem_cadastro") or {}
     if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", competencia or ""):
@@ -232,26 +315,31 @@ def calcular_checkout(
         if c["ec"] is not None:
             por_ec.setdefault(c["ec"], []).append(c)
 
+    limiar = Decimal(str(cfg.get("limiar_divergencia_brl", "0.01")))
+    por_id = {t["id_transacao"]: t for t in transacoes}
+    estornados: dict[str, str] = {}
     acum: dict[str, dict] = {}
     pendencias: list[PendenciaCalculada] = []
-    fora_escopo: Counter[str] = Counter()
-    vendas = processadas = 0
+    divergencias: list[DivergenciaCalculada] = []
+    por_tipo: dict[str, dict[str, int]] = {}
 
     for t in transacoes:
-        if _chave(t["tipo_lancamento"]) != TIPO_VENDA:
-            fora_escopo[t["tipo_lancamento"]] += 1
-            continue
-        vendas += 1
-        comissao, contrato, problemas = _avaliar_venda(t, cad, por_ec, rotas)
+        contagem = por_tipo.setdefault(t["tipo_lancamento"], {"total": 0, "processadas": 0, "bloqueadas": 0})
+        contagem["total"] += 1
+        comissao, contrato, taxa, problemas = _avaliar_linha(t, cad, por_ec, rotas, por_id, estornados)
         if problemas:
-            pendencias.append(_pendencia_de_venda(t, problemas))
+            contagem["bloqueadas"] += 1
+            pendencias.append(_pendencia_de_linha(t, problemas))
             continue
-        processadas += 1
+        contagem["processadas"] += 1
         ident = cad[t["ec"]]
         a = acum.setdefault(ident["cnpj"], {"lojista": ident["lojista"], "total": Decimal("0"), "origens": [], "contratos": {}})
         a["total"] += comissao
         a["origens"].append(Origem(t["arquivo_origem"], t["ref_origem"], comissao))
         a["contratos"].setdefault((contrato["arquivo_origem"], contrato["ref_origem"]), None)
+        div = _divergencia(t, ident["cnpj"], taxa, limiar)
+        if div:
+            divergencias.append(div)
 
     comissoes: list[ComissaoCalculada] = [
         {
@@ -266,15 +354,20 @@ def calcular_checkout(
     ]
     pendencias += _pendencias_cadastrais(contratos)
 
+    vendas = por_tipo.get(TIPO_VENDA, {"total": 0, "processadas": 0, "bloqueadas": 0})
     return {
         "comissoes": comissoes,
+        "divergencias": divergencias,
         "pendencias": pendencias,
         "resumo": {
             "total_orbe": len(transacoes),
-            "vendas_total": vendas,
-            "vendas_processadas": processadas,
-            "vendas_bloqueadas": vendas - processadas,
-            "fora_escopo_por_tipo": dict(sorted(fora_escopo.items())),
+            "por_tipo": dict(sorted(por_tipo.items())),
+            "linhas_processadas": sum(c["processadas"] for c in por_tipo.values()),
+            "linhas_bloqueadas": sum(c["bloqueadas"] for c in por_tipo.values()),
+            "vendas_total": vendas["total"],
+            "vendas_processadas": vendas["processadas"],
+            "vendas_bloqueadas": vendas["bloqueadas"],
+            "fora_escopo_por_tipo": {},
             "contagens_por_arquivo": dict(sorted(Counter(t["arquivo_origem"] for t in transacoes).items())),
         },
     }

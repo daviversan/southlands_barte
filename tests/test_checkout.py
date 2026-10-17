@@ -10,18 +10,21 @@ D = Decimal
 ARQ = "orbe.csv"
 
 
-def tx(id_, data="2026-09-10", ec="111", mod="CREDITO A VISTA", parc=1, bruto="1000.00", tipo="VENDA"):
+def tx(id_, data="2026-09-10", ec="111", mod="CREDITO A VISTA", parc=1, bruto="1000.00", tipo="VENDA",
+       aplicada="9.99", ref=None, original=None):
     return {"id_transacao": id_, "data_movimento": data, "ec": ec, "nome_origem": "NOME QUALQUER",
             "tipo_lancamento": tipo, "modalidade": mod, "qtd_parcelas": parc, "valor_bruto": D(bruto),
-            "taxa_aplicada_pct": D("9.99"), "arquivo_origem": ARQ, "ref_origem": id_}
+            "taxa_aplicada_pct": D(aplicada), "arquivo_origem": ARQ, "ref_origem": id_,
+            "id_referencia": ref, "data_venda_original": original}
 
 
 def contrato(ec="111", cnpj="00123456000199", ini=None, fim=None, ativo=True, ref="P!L1", **taxas):
     t = {"DEBITO": D("1.49"), "CREDITO_A_VISTA": D("2.59"), "CREDITO_2_6": D("3.19"),
-         "CREDITO_7_12": D("3.79"), "PIX": D("0.89")}
+         "CREDITO_7_12": D("3.79"), "PIX": D("0.89"), "ANTECIPACAO": D("2.10")}
     t.update({k: (None if v is None else D(v)) for k, v in taxas.items()})
     return {"cnpj": cnpj, "lojista": "Contrato", "ec": ec, "ativo": ativo, "vigencia_inicio": ini,
-            "vigencia_fim": fim, "taxas_pct": t, "arquivo_origem": "taxas.xlsx", "ref_origem": ref}
+            "vigencia_fim": fim, "taxas_pct": t, "spread_remessa_pct": None,
+            "arquivo_origem": "taxas.xlsx", "ref_origem": ref}
 
 
 CAD = {"111": {"cnpj": "00123456000199", "lojista": "Lojista Exemplo"}}
@@ -117,7 +120,7 @@ def test_varios_problemas_numa_venda_geram_uma_so_pendencia():
 
 
 def test_so_remessa_sem_ec_nao_gera_pendencia_cadastral_mas_checkout_sem_ec_gera():
-    vazio = dict(DEBITO=None, CREDITO_A_VISTA=None, CREDITO_2_6=None, CREDITO_7_12=None, PIX=None)
+    vazio = dict(DEBITO=None, CREDITO_A_VISTA=None, CREDITO_2_6=None, CREDITO_7_12=None, PIX=None, ANTECIPACAO=None)
     so_remessa = contrato(ec=None, ref="P!L2", **vazio)
     com_checkout = contrato(ec=None, ref="P!L3")
     inativo = contrato(ec="222", ativo=False, ref="P!L4")
@@ -126,14 +129,98 @@ def test_so_remessa_sem_ec_nao_gera_pendencia_cadastral_mas_checkout_sem_ec_gera
         ("P!L3", "CADASTRO_NAO_RESOLVIDO", D("0")), ("P!L4", "CONTRATO_INATIVO", D("0"))]
 
 
-def test_fora_de_escopo_conta_por_tipo_e_nao_vira_pendencia():
-    ts = [tx("A"), tx("B", tipo="ESTORNO", bruto="-10.00"), tx("C", tipo="ANTECIPACAO", mod=None, parc=None),
-          tx("D", tipo="REVERSAO ANTECIPACAO", mod=None, parc=None)]
+def test_todos_os_tipos_entram_e_resumo_conserva():
+    ts = [tx("A"), tx("B", tipo="ESTORNO", bruto="-10.00", ref="A", original="2026-09-10"),
+          tx("C", tipo="ANTECIPACAO", mod=None, parc=None),
+          tx("D", tipo="REVERSAO ANTECIPACAO", mod=None, parc=None, bruto="-200.00", ref="C", original="2026-09-10")]
     r = calc(ts, [contrato()])
     assert r["pendencias"] == []
-    assert r["resumo"] == {"total_orbe": 4, "vendas_total": 1, "vendas_processadas": 1, "vendas_bloqueadas": 0,
-                           "fora_escopo_por_tipo": {"ANTECIPACAO": 1, "ESTORNO": 1, "REVERSAO ANTECIPACAO": 1},
-                           "contagens_por_arquivo": {ARQ: 4}}
+    assert {o.ref: o.valor for o in r["comissoes"][0]["origens"]} == {
+        "A": D("25.90"), "B": D("-0.26"), "C": D("21.00"), "D": D("-4.20")}
+    assert r["comissoes"][0]["comissao_brl"] == D("42.44")
+    res = r["resumo"]
+    assert res["fora_escopo_por_tipo"] == {}
+    assert res["linhas_processadas"] + res["linhas_bloqueadas"] == res["total_orbe"] == 4
+    assert res["por_tipo"]["ESTORNO"] == {"total": 1, "processadas": 1, "bloqueadas": 0}
+
+
+def test_estorno_de_agosto_abate_setembro_com_taxa_da_venda_original():
+    # venda original fora do arquivo: resolvido por data_venda_original + EC, nunca ignorado
+    cs = [contrato(fim="2026-08-31", ref="P!L1", CREDITO_A_VISTA="3.00"), contrato(ini="2026-09-01", ref="P!L2")]
+    r = calc([tx("V"), tx("E", data="2026-09-05", tipo="ESTORNO", bruto="-1000.00", ref="TX-AGOSTO",
+                       original="2026-08-20", aplicada="3.00")], cs)
+    c = r["comissoes"][0]
+    assert {o.ref: o.valor for o in c["origens"]} == {"V": D("25.90"), "E": D("-30.00")}
+    assert c["comissao_brl"] == D("-4.10")  # a comissão de setembro cai; agosto não reabre
+    assert [d["ref_origem"] for d in r["divergencias"]] == ["V"]  # estorno: aplicada = contratada de agosto
+
+
+def test_bridge_estorno_depois_de_15_09_de_venda_anterior_usa_2_59():
+    cs = [contrato(fim="2026-09-14", ref="P!L6"), contrato(ini="2026-09-15", ref="P!L7", CREDITO_A_VISTA="2.19")]
+    ts = [tx("V", data="2026-09-10", aplicada="2.59"),
+          tx("E", data="2026-09-20", tipo="ESTORNO", bruto="-1000.00", ref="V", original="2026-09-10", aplicada="2.59")]
+    r = calc(ts, cs)
+    assert {o.ref: o.valor for o in r["comissoes"][0]["origens"]} == {"V": D("25.90"), "E": D("-25.90")}
+    assert r["divergencias"] == []  # 2,59 aplicada = 2,59 contratada na data original
+
+
+def test_reversao_anula_so_a_taxa_da_antecipacao():
+    ts = [tx("V", bruto="5000.00"), tx("ANT", tipo="ANTECIPACAO", mod=None, parc=None, bruto="4000.00"),
+          tx("REV", tipo="REVERSAO ANTECIPACAO", mod=None, parc=None, bruto="-4000.00", ref="ANT", original="2026-09-10")]
+    origens = {o.ref: o.valor for o in calc(ts, [contrato()])["comissoes"][0]["origens"]}
+    assert origens == {"V": D("129.50"), "ANT": D("84.00"), "REV": D("-84.00")}  # MDR da venda intacto
+
+
+def test_antecipacao_sem_taxa_bloqueia():
+    r = calc([tx("ANT", tipo="ANTECIPACAO", mod=None, parc=None)], [contrato(ANTECIPACAO=None)])
+    assert r["pendencias"][0]["tipo"] == "TAXA_AUSENTE"
+
+
+@pytest.mark.parametrize("linha,trecho", [
+    (tx("E", tipo="ESTORNO", bruto="10.00", ref="X", original="2026-09-01"), "não negativo"),
+    (tx("E", tipo="ESTORNO", bruto="-10.00", ref="X", original=None), "sem data da venda original"),
+    (tx("E", tipo="ESTORNO", bruto="-10.00", ref="X", original="2026-09-20"), "posterior"),
+    (tx("ANT", tipo="ANTECIPACAO", mod=None, parc=None, bruto="-1.00"), "não positivo"),
+    (tx("Z", tipo="AJUSTE MISTERIOSO"), "desconhecido"),
+])
+def test_lancamento_invalido_vira_pendencia_com_bruto_assinado(linha, trecho):
+    r = calc([linha], [contrato()])
+    p = r["pendencias"][0]
+    assert (p["tipo"], p["quem_decide"]) == ("LANCAMENTO_INVALIDO", "Financeiro")
+    assert trecho in p["motivo"] and p["valor_brl"] == linha["valor_bruto"]
+    assert r["resumo"]["linhas_bloqueadas"] == 1 and r["resumo"]["fora_escopo_por_tipo"] == {}
+
+
+def test_estorno_incompativel_com_a_original_e_estorno_em_dobro():
+    ts = [tx("V"), tx("ANT", tipo="ANTECIPACAO", mod=None, parc=None),
+          tx("E1", tipo="ESTORNO", bruto="-10.00", ref="V", original="2026-09-10"),
+          tx("E2", tipo="ESTORNO", bruto="-10.00", ref="V", original="2026-09-10"),
+          tx("E3", tipo="ESTORNO", bruto="-10.00", ref="ANT", original="2026-09-10")]
+    r = calc(ts, [contrato()])
+    por_ref = {p["ref_origem"]: p for p in r["pendencias"]}
+    assert set(por_ref) == {"E2", "E3"}
+    assert "Segundo ESTORNO" in por_ref["E2"]["motivo"] and "esperado VENDA" in por_ref["E3"]["motivo"]
+
+
+def test_divergencia_compara_taxas_com_sinal_e_ignora_truncamento():
+    ts = [tx("IGUAL", bruto="608.88", aplicada="2.59"),  # Orbe truncaria a taxa: não é divergência
+          tx("MAIOR", aplicada="3.09"),
+          tx("EST", tipo="ESTORNO", bruto="-500.00", ref="MAIOR", original="2026-09-10", aplicada="3.09"),
+          tx("NFIM", bruto="0.50", aplicada="3.59")]  # 0,50 x 1 p.p. = 0,005 -> 0,01 >= limiar
+    r = calc(ts, [contrato()], regras={"checkout": {"limiar_divergencia_brl": 0.01}})
+    d = {x["ref_origem"]: x for x in r["divergencias"]}
+    assert set(d) == {"MAIOR", "EST", "NFIM"}
+    assert (d["MAIOR"]["taxa_contratada_pct"], d["MAIOR"]["taxa_aplicada_pct"], d["MAIOR"]["diferenca_brl"]) == (
+        D("2.59"), D("3.09"), D("5.00"))
+    assert d["EST"]["diferenca_brl"] == D("-2.50")  # devolução do excesso: sinal acompanha o bruto
+    assert d["MAIOR"]["origens"] == [type(d["MAIOR"]["origens"][0])(ARQ, "MAIOR", D("5.00"))]
+    r = calc([tx("P", bruto="0.40", aplicada="3.59")], [contrato()], regras={"checkout": {"limiar_divergencia_brl": 0.01}})
+    assert r["divergencias"] == []  # 0,004 -> 0,00 < limiar
+
+
+def test_linha_bloqueada_nao_gera_divergencia():
+    r = calc([tx("A", ec="999", aplicada="4.49")], [contrato()])
+    assert r["divergencias"] == [] and r["pendencias"][0]["tipo"] == "CADASTRO_NAO_RESOLVIDO"
 
 
 def test_transacao_fora_da_competencia_e_erro_explicito():
@@ -164,16 +251,28 @@ def test_data_pack_conservacao_e_casos_de_borda():
     r = calcular_checkout(ts, cs, cad, "2026-09", regras)
     res = r["resumo"]
     assert res["total_orbe"] == 1957 and res["vendas_total"] == 1841
-    assert res["vendas_processadas"] + res["vendas_bloqueadas"] == 1841
-    assert res["fora_escopo_por_tipo"] == {"ANTECIPACAO": 38, "ESTORNO": 69, "REVERSAO ANTECIPACAO": 9}
+    assert res["linhas_processadas"] + res["linhas_bloqueadas"] == 1957
+    assert res["fora_escopo_por_tipo"] == {}
+    assert {t: c["total"] for t, c in res["por_tipo"].items()} == {
+        "ANTECIPACAO": 38, "ESTORNO": 69, "REVERSAO ANTECIPACAO": 9, "VENDA": 1841}
     assert sorted(res["contagens_por_arquivo"].values()) == [14, 1943]
-    # cada venda exatamente uma vez: comissão ou pendência bloqueante
+    # cada linha exatamente uma vez: comissão ou pendência bloqueante
     em_comissao = [o.ref for c in r["comissoes"] for o in c["origens"]]
-    em_pendencia = [p["ref_origem"] for p in r["pendencias"] if p["ref_origem"].startswith("TX")]
-    assert len(em_comissao) + len(em_pendencia) == 1841
-    assert len(set(em_comissao) | set(em_pendencia)) == 1841
+    em_pendencia = [p["ref_origem"] for p in r["pendencias"] if p["origens"][0].arquivo.endswith(".csv")]
+    assert len(em_comissao) + len(em_pendencia) == 1957
+    assert len(set(em_comissao) | set(em_pendencia)) == 1957
     # Σ origens = comissão (centavo exato)
     assert all(sum(o.valor for o in c["origens"]) == c["comissao_brl"] for c in r["comissoes"])
+    # as 5 taxas fora da aba vigente terminam em divergência ou pendência; nenhuma silenciada
+    divergentes = {d["ref_origem"] for d in r["divergencias"]}
+    for t in ts:
+        if t["taxa_aplicada_pct"] in {D("0.99"), D("1.99"), D("3.99"), D("4.09"), D("4.49")}:
+            assert t["id_transacao"] in divergentes or t["id_transacao"] in em_pendencia
+    # estornos com a venda original fora do arquivo (agosto) são resolvidos, nunca ignorados
+    ids = {t["id_transacao"] for t in ts}
+    agosto = [t for t in ts if t["tipo_lancamento"] == "ESTORNO" and t["id_referencia"] not in ids]
+    assert len(agosto) == 9 and all(t["data_venda_original"] < "2026-09-01" for t in agosto)
+    assert all(t["id_transacao"] in em_comissao or t["id_transacao"] in em_pendencia for t in agosto)
     # Atlas -> Comercial; Kiwi (inclusive o ajuste tardio) -> Financeiro; EC desconhecido nunca erro
     por_ref = {p["ref_origem"]: p for p in r["pendencias"]}
     assert por_ref["TX88447225"]["tipo"] == "CADASTRO_NAO_RESOLVIDO"
@@ -186,5 +285,6 @@ def test_data_pack_conservacao_e_casos_de_borda():
     for o in bridge["origens"]:
         t = por_id[o.ref]
         if t["modalidade"] == "CREDITO A VISTA":
-            taxa = D("2.59") if t["data_movimento"] <= "2026-09-14" else D("2.19")
+            data = t["data_venda_original"] if t["tipo_lancamento"] == "ESTORNO" else t["data_movimento"]
+            taxa = D("2.59") if data <= "2026-09-14" else D("2.19")
             assert o.valor == (t["valor_bruto"] * taxa / 100).quantize(D("0.01"), rounding="ROUND_HALF_UP")

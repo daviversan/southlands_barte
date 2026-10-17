@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from decimal import Decimal
 from pathlib import Path
 
 import openpyxl
@@ -28,10 +29,13 @@ _COLUNAS = {
     "cred. 2-6x": "CREDITO_2_6",
     "cred. 7-12x": "CREDITO_7_12",
     "pix": "PIX",
+    "antecipacao": "ANTECIPACAO",
+    "spread remessa": "spread_remessa",
     "vigencia": "vigencia",
     "obs": "obs",
 }
-_FAIXAS = ("DEBITO", "CREDITO_A_VISTA", "CREDITO_2_6", "CREDITO_7_12", "PIX")
+_FAIXAS = ("DEBITO", "CREDITO_A_VISTA", "CREDITO_2_6", "CREDITO_7_12", "PIX", "ANTECIPACAO")
+_SPREAD_PADRAO = ("padrao",)  # texto que significa "spread padrão" (P4 aberta): vira None
 _DATA = re.compile(r"\d{2}/\d{2}/\d{4}")
 
 
@@ -67,6 +71,13 @@ def _ec(x) -> str | None:
     if isinstance(x, float) and x == int(x):
         x = int(x)
     return str(x).strip()
+
+
+def _spread(x) -> Decimal | None:
+    """Spread de remessa em pontos percentuais. Vazio ou `padrão` = None (spread padrão, P4)."""
+    if normalize._vazio(x) or (isinstance(x, str) and _chave(x) in _SPREAD_PADRAO):
+        return None
+    return normalize.pct(x, fracao=True)
 
 
 def interpretar_vigencia(x) -> tuple[str | None, str | None]:
@@ -118,6 +129,7 @@ def ler_taxas(caminho: Path, arquivo_origem: str | None = None) -> list[Contrato
                 "vigencia_inicio": ini,
                 "vigencia_fim": fim,
                 "taxas_pct": {f: normalize.pct(celula(linha, f), fracao=True) for f in _FAIXAS},
+                "spread_remessa_pct": _spread(celula(linha, "spread_remessa")),
                 "arquivo_origem": rotulo,
                 "ref_origem": ref,
             })
