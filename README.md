@@ -1,28 +1,49 @@
-# Fechamento Tarvo — níveis Alvo e Extra
+# Fechamento Tarvo — setembro/2026
 
-Interface de operação: CLI e CSVs (e, opcionalmente, uma tela em Streamlit). Um comando lê os
-arquivos do mês **como vêm** e gera os seis CSVs do enunciado: comissões de checkout e remessa,
-divergências de taxa, notas a emitir, lançamentos bancários classificados, pendências e rastro.
-Não usa API externa nem chave.
+Solução do case Tarvo (Desafio Barte AI). Um comando lê os arquivos do mês **como vêm**, sem
+limpeza manual, e gera os seis CSVs do enunciado em `saida/`:
 
-De um clone limpo, com Python 3.12:
+1. comissões de cada lojista, por linha de negócio (checkout e remessa);
+2. divergências entre taxa contratada e aplicada, transação por transação;
+3. notas fiscais a emitir;
+4. lançamentos dos dois extratos classificados no plano de contas;
+5. pendências que exigem uma pessoa, com motivo e quem decide;
+6. o rastro, que liga cada número às linhas de origem.
+
+Nível entregue: **Alvo + Extra** (rastro completo com conferência automática, pendências
+explicadas e execução para outubro sem retrabalho). Interface: CLI e CSVs, mais uma tela opcional
+em Streamlit.
+
+## Instalar e rodar do zero
+
+Python 3.12. De um clone limpo:
 
 ```bash
-git clone <url-do-repositorio> southlands_barte && cd southlands_barte
+git clone https://github.com/daviversan/southlands_barte.git && cd southlands_barte
 python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 python -m src.main --entrada context/tarvo_data_pack --competencia 2026-09 --saida saida/
 ```
 
 Testes: `python -m pytest -q`.
 
-Os testes usam uma pasta `.pytest_tmp-<uuid>/` exclusiva por execução, ignorada
-pelo Git. Isso evita conflitos de permissões entre o usuário e a conta do
-sandbox no Windows. Um `--basetemp` explícito continua sendo respeitado.
-Os documentos gerados em `saida/` são ignorados; apenas `.gitkeep` é preservado.
-Na publicação, a pasta de preparação usa as permissões herdadas da pasta pai.
-Isso permite ler os CSVs no front mesmo quando o fechamento é executado pela
-conta do sandbox no Windows; uma pasta temporária privada transferia sua ACL
-restritiva para os arquivos ao movê-los.
+## Chaves necessárias
+
+**Nenhuma.** Todo número sai de regra determinística, sem chamada a API externa. Não é preciso
+configurar `ANTHROPIC_API_KEY` nem outra credencial.
+
+## Estrutura do repositório
+
+| Caminho | Conteúdo |
+|---|---|
+| `README.md` | este arquivo |
+| `HIPOTESES.md` | premissas assumidas, perguntas ao financeiro e respostas recebidas |
+| `PROMPTS/` | histórico das sessões de IA (transcripts e sumários) + `MOMENTOS.md` |
+| `saida/` | destino dos seis CSVs; não são versionados, o comando acima os gera do zero |
+| `src/` | código: `ingest/` (leitura das fontes), `regras/` (cálculos), `core/` (contrato de saída e conferência), `main.py` (CLI), `app.py` (tela) |
+| `config/` | regras e cadastro mestre de lojistas (`regras.yaml`, `lojistas.yaml`) |
+| `tests/` | testes automáticos |
+| `context/tarvo_data_pack/` | entrada do case, intocada |
+| `PLANO.md`, `DICIONARIO_DADOS.md`, `CONTRATO_TECNICO_*.md` | plano por nível de entrega, dicionário de dados e specs usados na construção |
 
 ## Outro mês (outubro em diante)
 
@@ -107,11 +128,13 @@ Para quem prefere não abrir CSVs: rodar o fechamento, ver os totais e a confer�
 `id_saida` e ver as linhas de origem, e a fila de pendências por `quem_decide`.
 
 ```bash
-pip install streamlit
 streamlit run src/app.py
 ```
 
-A tela não tem regra de negócio: chama o mesmo `main.run()` da CLI e só lê `saida/`.
+O `streamlit` já vem no `requirements.txt`. O pipeline não depende dele.
+
+A tela não tem regra de negócio: chama o mesmo `main.run()` da CLI e lê os CSVs
+da pasta de resultados exclusiva da sessão. A CLI continua publicando em `--saida`.
 
 Na barra lateral, informe o **mês analizado** no formato `AAAA-MM` e arraste os
 documentos para **Documentos do mês** (ou clique para selecioná-los). Envie juntos
@@ -125,7 +148,10 @@ Sem envio, a tela usa o pacote de exemplo em `context/tarvo_data_pack`.
 ## Limitações conhecidas
 
 - Linha bancária sem regra vira pendência `HUMANO` para o Contador; não há classificação por IA.
-- A tela Streamlit foi testada com um Streamlit simulado (o pacote não pôde ser instalado no
-  ambiente de desenvolvimento); falta abrir e conferir visualmente.
+  Em setembro, os 184 lançamentos fecham por regra.
+- A tela Streamlit não tem teste automático de interface: a lógica que ela usa é testada, mas a
+  renderização só foi conferida à mão.
+- Fora do escopo: conciliação das TEDs da Orbe com o líquido das transações, emissão real de NF e
+  integração com o ERP Fênix.
 - Perguntas abertas ao financeiro (spread padrão, Horizonte/Kiwi, ressalva, provisão de folha,
   tomador da NF de checkout, `ref_origem` do Aurora) estão parametrizadas e listadas em `HIPOTESES.md`.

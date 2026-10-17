@@ -3,6 +3,7 @@
 Sem regra de negócio: a execução é `main.run()` (a mesma da CLI) e o resto só lê os CSVs de `saida/`.
 O Streamlit é opcional e só é importado em `render()`; os auxiliares de leitura são testáveis sem ele.
 Dados podem ser enviados pela tela ou lidos do pacote de exemplo em context/tarvo_data_pack.
+A saída fica em uma pasta temporária por sessão; cada visitante começa com a tela limpa.
 
     pip install streamlit
     streamlit run src/app.py
@@ -13,6 +14,7 @@ import contextlib
 import csv
 import io
 import sys
+import tempfile
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -43,6 +45,13 @@ def competencia_padrao(hoje: date | None = None) -> str:
     hoje = hoje or date.today()
     ano, mes = (hoje.year, hoje.month - 1) if hoje.month > 1 else (hoje.year - 1, 12)
     return f"{ano:04d}-{mes:02d}"
+
+
+def pasta_da_sessao(estado) -> Path:
+    """Pasta de saída desta sessão: criada vazia na primeira visita, reaproveitada nas interações seguintes."""
+    if "pasta_saida" not in estado:
+        estado["pasta_saida"] = tempfile.mkdtemp(prefix="fechamento_")
+    return Path(estado["pasta_saida"])
 
 
 def ler_saida(pasta: str | Path) -> dict[str, list[dict[str, str]]]:
@@ -177,6 +186,7 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
 
     st.set_page_config(page_title="Fechamento Tarvo", layout="wide")
     st.title("Fechamento Tarvo")
+    saida = pasta_da_sessao(st.session_state)
 
     with st.sidebar:
         st.header("Rodar o fechamento")
@@ -193,11 +203,12 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             st.caption("Sem documentos enviados, Rodar usa os dados de exemplo de context/tarvo_data_pack.")
         if st.button("Rodar", type="primary"):
             with st.spinner("Lendo arquivos, calculando e conferindo..."):
-                st.session_state["execucao"] = (executar_documentos(competencia, documentos)
-                                                if documentos else executar(competencia))
+                st.session_state["execucao"] = (executar_documentos(competencia, documentos, saida=saida)
+                                                if documentos else executar(competencia, ENTRADA, saida))
                 if st.session_state['execucao'][0]:
                     st.session_state['mes_publicado'] = competencia
         st.caption("Se a conferência falhar, a saída anterior é mantida.")
+        st.caption("Os resultados ficam separados por sessão e não são recuperados ao recarregar a página.")
 
     mes_publicado = st.session_state.get('mes_publicado')
     if mes_publicado:
@@ -216,9 +227,9 @@ def render() -> None:  # pragma: no cover - interface; a lógica testável está
             st.caption(f"Conferência: {len(checagens)} checagens, {len(falhas)} falha(s).")
 
     try:
-        saidas = ler_saida(SAIDA)
+        saidas = ler_saida(saida)
     except PermissionError as erro:
-        st.error(f"Sem permissão para ler o arquivo {erro.filename or SAIDA}. "
+        st.error(f"Sem permissão para ler o arquivo {erro.filename or saida}. "
                  "Verifique as permissões da pasta de saída e se o arquivo está aberto em outro programa.")
         return
     except OSError as erro:

@@ -25,6 +25,14 @@ def test_app_nao_importa_regras_nem_leitores():
     assert internos == {"src", "src.core.saida"}  # `from src import main`: só a mesma entrada da CLI
 
 
+def test_cada_sessao_tem_pasta_de_saida_propria_e_vazia():
+    uma, outra = {}, {}
+    pasta = app.pasta_da_sessao(uma)
+    assert pasta.is_dir() and not any(pasta.iterdir())
+    assert app.pasta_da_sessao(uma) == pasta  # a mesma sessão reaproveita a pasta entre cliques
+    assert app.pasta_da_sessao(outra) != pasta and pasta != app.SAIDA
+
+
 def test_competencia_padrao_e_o_mes_anterior():
     assert app.competencia_padrao(date(2026, 10, 17)) == "2026-09"
     assert app.competencia_padrao(date(2027, 1, 5)) == "2026-12"
@@ -116,7 +124,7 @@ def test_render_percorre_todas_as_telas(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "streamlit", falso)
     monkeypatch.setattr(app, "competencia_padrao", lambda: "2026-09")
     executar, ler_saida = app.executar, app.ler_saida  # a saída vai para tmp_path, não para saida/
-    monkeypatch.setattr(app, "executar", lambda competencia: executar(competencia, PACK, tmp_path))
+    monkeypatch.setattr(app, "executar", lambda competencia, *_: executar(competencia, PACK, tmp_path))
     monkeypatch.setattr(app, "ler_saida", lambda _: ler_saida(tmp_path))
     app.render()
     ok, _, checagens = falso.session_state["execucao"]
@@ -212,12 +220,12 @@ def test_render_encaminha_documentos_enviados(monkeypatch):
     monkeypatch.setitem(sys.modules, 'streamlit', falso)
     monkeypatch.setattr(app, 'competencia_padrao', lambda:'2026-09')
     recebidos = []
-    def executar(competencia, documentos):
-        recebidos.append((competencia, documentos))
+    def executar(competencia, documentos, saida):
+        recebidos.append((competencia, documentos, saida))
         return False, 'Lote incompleto', []
     monkeypatch.setattr(app, 'executar_documentos', executar)
     monkeypatch.setattr(app, 'ler_saida', lambda _:{n:[] for n in app.ESQUEMAS})
     app.render()
-    assert recebidos == [('2026-09', falso.documentos)]
+    assert recebidos == [('2026-09', falso.documentos, Path(falso.session_state['pasta_saida']))]
     uploader, = [c for c in falso.chamadas if c[0] == 'file_uploader']
     assert uploader[2]['accept_multiple_files'] is True
