@@ -83,3 +83,38 @@ Não consta no `00_LEIA-ME.md`, no enunciado nem no `DICIONARIO_DADOS.md`. **[SA
 - **[ASSUMIDO] Roteamento de pendências** por `checkout.ec_sem_cadastro` (config): Atlas → `CONTRATO_AUSENTE`/Comercial (confirmado, P8); Horizonte Intercâmbio → `CONTRATO_AMBIGUO`/Comercial (segue a tabela do contrato técnico; quem decide não foi dito, P7); demais ECs → `CADASTRO_NAO_RESOLVIDO`/Financeiro.
 - **Resultado preliminar (data pack):** 1.841 vendas = 1.574 processadas + 267 em pendência (Kiwi + Horizonte Viagens 152, Horizonte Intercâmbio 69, Atlas 49, Globo Trotter 0 vendas); 18 lojistas com comissão; 116 não-VENDA fora de escopo (69 estornos, 38 antecipações, 9 reversões); 1.943 linhas do `01_` + 14 do `06_`.
 - **M7, revisão de 5 vendas (feita por A; falta a cruzada com B):** TX88410932 608,88×2,69% = 16,3789 → 16,38 (Orbe truncou 16,37); TX88410128 5.773,57×3,79% → 218,82; TX88416245 15.600,29×3,79% → 591,25; TX88436225 2.716,38×3,19% → 86,65; TX88444565 2.459,05×3,19% → 78,44. Todas batem com o rastro.
+
+## 5. Alvo: hipóteses e decisões (CONTRATO_TECNICO_ALVO.md)
+
+Registradas na elaboração do contrato do Alvo. Nenhuma delas veio do financeiro; as marcadas **[PROPOSTO]** aguardam confirmação do time (contrato Alvo §10) e podem mudar números.
+
+| # | Hipótese / decisão | Etiqueta | Efeito e parâmetro |
+|---|---|---|---|
+| H1 | **Arredondamento da remessa por operação** (`q2(Spread R$ × 0,5)` por linha; comissão do lojista = soma das linhas), coerente com §2 | [PROPOSTO] | Comissão REMESSA = **R$ 39.543,45**; a conta "50% × Σ" daria R$ 39.542,88 (diferença +R$ 0,57). NF REMESSA = R$ 39.543,45. Os 39.542,88 de §3.4 e do PLANO A4 ficam como preliminar superado, se confirmado. Alternativa (arredondar só o total) exigiria linha de ajuste no rastro, vedada pelo contrato |
+| H2 | **`ref_origem` da operação repetida = `<Nº Operação>#<k>`** (k = ordem da ocorrência: `PC-0926-0162#2`), com origem no `.eml` | [PROPOSTO] | Evita duplicar `ref_origem` no rastro. Alternativa: linha física (`Operações!L77`). A e B devem combinar |
+| H3 | **Janela de contrapartida de transferência entre contas = 3 dias** | [DECIDIDO] | `bancos.janela_contrapartida_dias`. Os 3 pares do data pack batem no mesmo dia. Sem par: `TRANSFERENCIA_SEM_CONTRAPARTIDA` (R$ 300 mil de 30/09, pergunta 15 aberta) |
+| H4 | **`conta_codigo` pode ser vazio quando `metodo = HUMANO`** (`confianca = 0`) | [PROPOSTO] | Exige relaxar a validação em `saida.py` só nesse caso. Hoje nenhum lançamento cai aqui (as 184 casam por regra); teste sintético. Conferir no enunciado |
+| H5 | **Tolerância do spread de remessa em pontos percentuais**: `precisao_spread_pct` (0,00001 em fração) vale **0,001 p.p.** | [DECIDIDO] | Converter `× 100` no código; chave do YAML mantida em fração. Testar com a operação de ~R$ 0,03 |
+| H6 | **`OPERACAO_POSSIVEL_DUPLICIDADE` só sinaliza** (mesmo CNPJ, Valor ME, moeda e data com `Nº Operação` diferente); a operação continua na comissão | [ASSUMIDO] | Critério de "mesmos campos" não foi comentado pela Helena (P9). Hoje não ocorre além da própria `PC-0926-0162` |
+| H7 | **Divergência de remessa não calculada para spread padrão** (célula vazia ou `padrão`); a comissão é calculada normalmente | [ASSUMIDO] | Pergunta 4 aberta. 51 operações sem divergência calculada (Kiwi, Ponte Aérea, Canguru). `spread_remessa_pct = None` |
+| H8 | **Modo `despesa` de folha e impostos de 08 não tem conta para INSS e FGTS** no plano (só 4.1.01 Salários); essas linhas viram `LANCAMENTO_NAO_CLASSIFICADO` | [ASSUMIDO] | Pergunta 12 aberta; padrão `baixa_provisao` (2.1.04.001/.002/.003) |
+| H9 | **Estorno e reversão: a taxa e a vigência vêm da `data_venda_original`; a comissão abate o mês do estorno** (agosto não reabre). Estorno de venda de agosto é resolvido por `data_venda_original` + EC, sem precisar achar a original | [CONFIRMADO] P2/P3 | 9 estornos de agosto fora do arquivo. Estorno em 15/09 ou depois de venda da Bridge anterior a 15/09 usa 2,59% |
+| H10 | **Divergência de estorno tem sinal negativo** (`diferenca_brl = bruto × (aplicada − contratada)`, bruto negativo): devolução do excesso. Positivo = lojista pagou a mais | [DECIDIDO] | 4 estornos de divergentes no data pack. Divergência não é restituição (pergunta 1 não respondeu sobre devolver a diferença) |
+| H11 | **Linha bloqueada de qualquer tipo da Orbe rastreia o bruto assinado**; tipo de lançamento desconhecido, estorno em dobro e sinal inconsistente viram `LANCAMENTO_INVALIDO` | [DECIDIDO] | Nada some em silêncio; `fora_escopo_por_tipo` fica vazio no Alvo |
+| H12 | **Atlas e lojista sem linha processada não têm comissão nem NF**; a explicação é a pendência por linha (`CONTRATO_AUSENTE`, Comercial). Sem `NF_NAO_EMITIDA` extra | [CONFIRMADO] P8 (nota não emitida) / [DECIDIDO] (sem duplicar alarme) | `NF_NAO_EMITIDA` só para comissão com saldo ≤ 0 |
+| H13 | **Tomador da NF de checkout = o lojista** (CNPJ do cadastro) | [ASSUMIDO] P16 | `checkout.nf_tomador: lojista` |
+| H14 | **Remessa identifica o lojista só por CNPJ e não exige EC**; nome exibido do cadastro mestre, senão da planilha | [DECIDIDO] | Kiwi, Novo Horizonte, Nórdica e Ponte Aérea entram na remessa mesmo sem EC. A Kiwi tem checkout bloqueado e remessa faturável |
+| H15 | **`Data Liquidação` da Ponte não é validada contra a competência** (só `Data Contratação`) | [DECIDIDO] | 6 operações liquidam em outubro; todas contratadas em setembro |
+| H16 | **Rodapé da Ponte divergente das linhas vira pendência `RODAPE_DIVERGENTE`**, não aborta a execução | [DECIDIDO] | Hoje confere: 233 linhas e R$ 78.073,59 |
+| H17 | **Ordenação das comissões por `(linha_negocio, cnpj)`**: CHECKOUT antes de REMESSA | [DECIDIDO] | Mantém `COM-0001…0018` do Mínimo. Ids `PEN-` do Mínimo mudam ao entrarem tipos novos |
+| H18 | **Repasse da Ponte de 08/2026 (R$ 61.884,12) classificado em 1.1.03.002 e Pix sem identificação em 1.1.09.002 com `metodo = REGRA`**, esta com pendência | [ASSUMIDO] P14 / [DECIDIDO] | O repasse não é pendência |
+
+### 5.1 Números de referência do Alvo (recálculo independente, preliminar)
+
+Verificações do data pack, não constantes do algoritmo; o número final sai de `saida/`.
+
+- **Checkout:** 1.666 linhas tratadas + 291 bloqueadas = 1.957. Comissão **R$ 191.464,34** = vendas 180.006,23 − estornos 7.186,48 + antecipações 23.105,36 − reversões 4.460,77. Bloqueadas: 267 vendas, 12 estornos, 8 antecipações, 4 reversões.
+- **Divergências de checkout:** 92 linhas (88 vendas, R$ 1.674,67; 4 estornos); líquido **R$ 1.576,23**. Rota Global 87, Bridge 5. Antecipações e reversões: nenhuma.
+- **Remessa:** 233 = 228 válidas + 4 `CONTESTACAO` + 1 `OPERACAO_REPETIDA`; base R$ 79.085,76 (78.073,59 − 821,88 + 1.834,05); 41 divergências, R$ 1.419,05.
+- **Bancos:** 84 Aurora + 100 Meridiano = 184, todas por regra; pendências: Pix sem identificação (R$ 7.350,00) e TED sem contrapartida (−R$ 300.000,00).
+- **Notas:** 18 CHECKOUT + 1 REMESSA. Σ NF CHECKOUT = R$ 191.464,34 **se nenhum dos 18 lojistas tiver saldo ≤ 0** (a verificar).
